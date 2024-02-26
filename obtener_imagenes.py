@@ -2,6 +2,7 @@ import pandas as pd
 from tqdm import tqdm
 import os, platform, math
 import requests
+from requests.exceptions import RequestException
 
 def guardar_ficheros():    
     # Guardar el DataFrame de registros fallidos en un archivo CSV
@@ -98,7 +99,7 @@ try:
                     # Descargar y guardar la imagen si aún no existe
                     if not os.path.exists(ruta_completa):
                         try:
-                            respuesta = requests.get(fila['identifier'])
+                            respuesta = requests.get(fila['identifier'],timeout=5)
                             if respuesta.status_code == 200:
                                 with open(ruta_completa, 'wb') as archivo:
                                     archivo.write(respuesta.content)
@@ -108,12 +109,15 @@ try:
                         except KeyboardInterrupt:
                             guardar_ficheros()
                             print("El programa ha finalizado con falllos con éxito")
-                            apagar_equipo()
                             exit(-1)
-
+                        except RequestException as e:
+                            print("Fallo en la URL : " + fila['identifier'])
+                            print(e)
+                            # Agregar la fila al DataFrame de registros fallidos si ocurre un error
+                            df_fallidos = pd.concat([df_fallidos, pd.DataFrame([fila])], ignore_index=True)
+                            
                         except Exception as e: 
-                            print("Fallo el identificador: " + fila['identifier'])
-                            print(fila)
+                            print("Fallo en la URL: " + fila['identifier'])
                             print(e)
                             # Agregar la fila al DataFrame de registros fallidos si ocurre un error
                             df_fallidos = pd.concat([df_fallidos, pd.DataFrame([fila])], ignore_index=True)
