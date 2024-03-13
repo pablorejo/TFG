@@ -18,11 +18,13 @@ def obtener_primeras_3000_lineas(archivo_entrada, archivo_salida):
     except Exception as e:
         print(f"Ocurrió un error: {e}")
 
-# Usar la función
-archivo_entrada = 'ocurrencias_parseado.csv'
-archivo_salida = 'ocurrencias_2.csv'
-# archivo_entrada = 'multimedia.txt'
-# archivo_salida = 'multimedia_2.txt'
-obtener_primeras_3000_lineas(archivo_entrada, archivo_salida)
+
+if __name__ == '__main__':
+    # Usar la función
+    archivo_entrada = 'ocurrencias_parseado.csv'
+    archivo_salida = 'ocurrencias_2.csv'
+    # archivo_entrada = 'multimedia.txt'
+    # archivo_salida = 'multimedia_2.txt'
+    obtener_primeras_3000_lineas(archivo_entrada, archivo_salida)
 
 

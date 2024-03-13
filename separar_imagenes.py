@@ -2,16 +2,7 @@ import os
 import tkinter as tk
 from PIL import Image, ImageTk  # Importación correcta
 import random
-nombre_archivo_buenas = 'imagenes_buenas.txt'
-nombre_archivo_malas = 'imagenes_malas.txt'
-
-def encontrar_imagenes_jpg(directorio):
-    imagenes_jpg = []
-    for root, dirs, files in os.walk(directorio):
-        for file in files:
-            if file.lower().endswith('.jpg'):
-                imagenes_jpg.append(os.path.join(root, file))
-    return imagenes_jpg
+import globales
 
 class ImageOrganizerApp:
     def __init__(self, master: tk.Tk):
@@ -20,7 +11,7 @@ class ImageOrganizerApp:
 
         self.vaciar_ficheros()
         
-        self.imagenes_jpg = encontrar_imagenes_jpg(".")
+        self.imagenes_jpg = globales.encontrar_imagenes_jpg("imagenes")
         random.shuffle(self.imagenes_jpg)
         self.numero_imagen = 0
 
@@ -53,7 +44,7 @@ class ImageOrganizerApp:
         new_size = (int(original_width * ratio), int(original_height * ratio))
 
         # Redimensiona la imagen
-        self.image = self.image.resize(new_size, Image.ANTIALIAS)
+        self.image = self.image.resize(new_size, Image.Resampling.LANCZOS)
 
         self.photo = ImageTk.PhotoImage(self.image) 
         
@@ -72,22 +63,23 @@ class ImageOrganizerApp:
         btn_right.pack(side='right', padx=20)
 
     def left_button_action(self, event=None):
-        with open(nombre_archivo_malas, 'a') as archivo:
+        with open(globales.nombre_archivo_malas, 'a') as archivo:
             archivo.write(self.url + "\n")
         self.siguiente_imagen()
 
     def right_button_action(self, event=None):
-        with open(nombre_archivo_buenas, 'a') as archivo:
+        with open(globales.nombre_archivo_buenas, 'a') as archivo:
             archivo.write(self.url + "\n")
         self.siguiente_imagen()
     
     def vaciar_ficheros(self):
-        with open(nombre_archivo_malas, 'w') as archivo:
+        with open(globales.nombre_archivo_malas, 'w') as archivo:
             archivo.close()
-        with open(nombre_archivo_buenas, 'w') as archivo:
+        with open(globales.nombre_archivo_buenas, 'w') as archivo:
             archivo.close()
         
 
-root = tk.Tk()
-my_gui = ImageOrganizerApp(root)
-root.mainloop()
+if __name__ == "__main__":
+    root = tk.Tk()
+    my_gui = ImageOrganizerApp(root)
+    root.mainloop()
