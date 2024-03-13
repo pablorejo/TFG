@@ -62,7 +62,7 @@ if __name__ == '__main__':
         df_fallidos = pd.DataFrame(df_occurrences.columns)
         df_completados = pd.DataFrame(df_occurrences.columns)
         break
-
+    
     try:
         # Inicializar la barra de progreso para el procesamiento total de elementos
         with tqdm(total=total_chunks, desc="Procesando elementos", unit="elemento") as pbar_total:
@@ -89,12 +89,14 @@ if __name__ == '__main__':
                         ruta_completa = os.path.join(ruta_carpeta, parsear_nombre(str(fila['gbifID'])) + ".jpg")
 
                         # Descargar y guardar la imagen si aún no existe
-                        if not os.path.exists(ruta_completa):
+                        if not os.path.exists(ruta_completa) or globales.es_imagen_corrupta(ruta_completa):
                             try:
+                                os.remove(ruta_completa)
                                 respuesta = requests.get(fila['identifier'],timeout=5)
                                 if respuesta.status_code == 200:
                                     with open(ruta_completa, 'wb') as archivo:
                                         archivo.write(respuesta.content)
+                                        globales.convert_to_webp(ruta_completa)
                                     # Guardamos los que si que se han completado con exito.
                                     df_completados = pd.concat([df_completados, pd.DataFrame([fila])], ignore_index=True)
                             
@@ -119,10 +121,10 @@ if __name__ == '__main__':
 
         guardar_ficheros()
         print("El programa ha finalizado con éxito")
-        apagar_equipo()
+        # globales.apagar_equipo()
 
     except Exception as e:
         guardar_ficheros()
         print("El programa ha finalizado con falllos con éxito")
         print(f"Excepcion {e}")
-        apagar_equipo()
+        # globales.apagar_equipo()
