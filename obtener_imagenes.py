@@ -3,7 +3,7 @@ from tqdm import tqdm
 import math, os
 import requests
 from requests.exceptions import RequestException
-import globales
+import globales as gb
 
 def guardar_ficheros():    
     # Guardar el DataFrame de registros fallidos en un archivo CSV
@@ -13,22 +13,6 @@ def guardar_ficheros():
     # Guardar el DataFrame de registros completados en un archivo CSV
     nombre_completados = 'ocurrencias_completados.csv'
     df_completados.to_csv(nombre_completados, index=False)
-
-def parsear_nombre(nombre):
-    reemplazos = {
-        ":": "a",
-        "<": "b",
-        ">": "c",
-        "\"": "e",
-        "|": "f",
-        "?": "g",
-        "*": "h"
-    }
-
-    nombre = str(nombre)
-    for buscar, reemplazar in reemplazos.items():
-        nombre = nombre.replace(buscar, reemplazar)
-    return nombre
 
 if __name__ == '__main__':
     # Comprobamos que estamos como superusuario
@@ -48,7 +32,7 @@ if __name__ == '__main__':
 
     print("Leyendo el fichero de ocurrencias")
     # Leer el archivo CSV en fragmentos para manejar grandes volúmenes de datos
-    chunks = pd.read_csv(ruta_del_archivo_occurrences, delimiter=',', chunksize=chunksize, low_memory=False, on_bad_lines='skip')
+    df_occurrences = pd.read_csv(ruta_del_archivo_occurrences, delimiter=',', low_memory=False, on_bad_lines='skip')
 
     # Calcular el tamaño total del archivo para estimar el número de chunks
     espacio = os.path.getsize(ruta_del_archivo_occurrences)
@@ -58,73 +42,74 @@ if __name__ == '__main__':
     print("Iniciando chunks\n")
 
     # Procesar solo el primer chunk para inicializar el DataFrame de registros fallidos
-    for df_occurrences in chunks:
-        df_fallidos = pd.DataFrame(df_occurrences.columns)
-        df_completados = pd.DataFrame(df_occurrences.columns)
-        break
-    
+    df_fallidos = pd.DataFrame(df_occurrences.columns)
+    df_completados = pd.DataFrame(df_occurrences.columns)
+
+    print(df_occurrences.head())
+    taxones = df_occurrences[df_occurrences['class'] == 'Bivalvia']
+
     try:
         # Inicializar la barra de progreso para el procesamiento total de elementos
         with tqdm(total=total_chunks, desc="Procesando elementos", unit="elemento") as pbar_total:
             es_primer_chunk = True  # Indicador para saber si estamos procesando el primer chunk
             nombre_archivo = 'ocurrencias.csv'
 
-            # Procesar cada chunk del archivo CSV
-            for df_occurrences in chunks:
+            # Iterar sobre cada fila del DataFrame actual
+            for indice, fila in tqdm(df_occurrences.iterrows(), desc="Procesando elementos", unit="elementos"):
 
-                # Iterar sobre cada fila del DataFrame actual
-                for indice, fila in tqdm(df_occurrences.iterrows(), desc="Procesando elementos", unit="elementos"):
+                # Comprobar si la fila tiene un identificador válido
+                if pd.notna(fila['identifier']):
 
-                    # Comprobar si la fila tiene un identificador válido
-                    if pd.notna(fila['identifier']):
+                    # Construir la ruta de la carpeta basada en la clasificación taxonómica
+                    ruta_carpeta = f"{RUTA_IMAGENES}/{gb.parsear_nombre(fila['class'])}/{gb.parsear_nombre(fila['order'])}/{gb.parsear_nombre(fila['family'])}/{gb.parsear_nombre(fila['genus'])}/{gb.parsear_nombre(fila['acceptedScientificName'])}"
 
-                        # Construir la ruta de la carpeta basada en la clasificación taxonómica
-                        ruta_carpeta = f"{RUTA_IMAGENES}/{parsear_nombre(fila['class'])}/{parsear_nombre(fila['order'])}/{parsear_nombre(fila['family'])}/{parsear_nombre(fila['genus'])}/{parsear_nombre(fila['acceptedScientificName'])}"
+                    # Crear la carpeta si no existe
+                    if not os.path.exists(ruta_carpeta):
+                        os.makedirs(ruta_carpeta)
 
-                        # Crear la carpeta si no existe
-                        if not os.path.exists(ruta_carpeta):
-                            os.makedirs(ruta_carpeta)
+                    # Construir la ruta completa del archivo de imagen a guardar
+                    ruta_completa = os.path.join(ruta_carpeta, gb.parsear_nombre(str(fila['gbifID'])) + ".jpg")
+                    ruta_webp = ruta_completa.replace(".jpg",".webp")
 
-                        # Construir la ruta completa del archivo de imagen a guardar
-                        ruta_completa = os.path.join(ruta_carpeta, parsear_nombre(str(fila['gbifID'])) + ".jpg")
 
-                        # Descargar y guardar la imagen si aún no existe
-                        if not os.path.exists(ruta_completa) or globales.es_imagen_corrupta(ruta_completa):
-                            try:
-                                os.remove(ruta_completa)
-                                respuesta = requests.get(fila['identifier'],timeout=5)
-                                if respuesta.status_code == 200:
-                                    with open(ruta_completa, 'wb') as archivo:
-                                        archivo.write(respuesta.content)
-                                        globales.convert_to_webp(ruta_completa)
-                                    # Guardamos los que si que se han completado con exito.
-                                    df_completados = pd.concat([df_completados, pd.DataFrame([fila])], ignore_index=True)
+                    
+                    # Descargar y guardar la imagen si aún no existe
+                    if (not os.path.exists(ruta_completa) or gb.es_imagen_corrupta(ruta_completa) and not os.path.exists(ruta_webp)):
+                        try:
+                            os.remove(ruta_completa)
+                            respuesta = requests.get(fila['identifier'],timeout=5)
+                            if respuesta.status_code == 200:
+                                with open(ruta_completa, 'wb') as archivo:
+                                    archivo.write(respuesta.content)
+                                    gb.convert_to_webp(ruta_completa)
+                                # Guardamos los que si que se han completado con exito.
+                                df_completados = pd.concat([df_completados, pd.DataFrame([fila])], ignore_index=True)
+                        
+                        except KeyboardInterrupt:
+                            guardar_ficheros()
+                            print("El programa ha finalizado con falllos con éxito")
+                            exit(-1)
+
+                        except RequestException as e:
+                            print("Fallo en la URL : " + fila['identifier'])
+                            print(e)
+                            # Agregar la fila al DataFrame de registros fallidos si ocurre un error
+                            df_fallidos = pd.concat([df_fallidos, pd.DataFrame([fila])], ignore_index=True)
                             
-                            except KeyboardInterrupt:
-                                guardar_ficheros()
-                                print("El programa ha finalizado con falllos con éxito")
-                                exit(-1)
-                            except RequestException as e:
-                                print("Fallo en la URL : " + fila['identifier'])
-                                print(e)
-                                # Agregar la fila al DataFrame de registros fallidos si ocurre un error
-                                df_fallidos = pd.concat([df_fallidos, pd.DataFrame([fila])], ignore_index=True)
-                                
-                            except Exception as e: 
-                                print("Fallo en la URL: " + fila['identifier'])
-                                print(e)
-                                # Agregar la fila al DataFrame de registros fallidos si ocurre un error
-                                df_fallidos = pd.concat([df_fallidos, pd.DataFrame([fila])], ignore_index=True)
+                        except Exception as e: 
+                            
+                            # Agregar la fila al DataFrame de registros fallidos si ocurre un error
+                            df_fallidos = pd.concat([df_fallidos, pd.DataFrame([fila])], ignore_index=True)
 
-                # Actualizar la barra de progreso después de procesar cada chunk
-                pbar_total.update(1)
+            # Actualizar la barra de progreso después de procesar cada chunk
+            pbar_total.update(1)
 
         guardar_ficheros()
         print("El programa ha finalizado con éxito")
-        # globales.apagar_equipo()
+        # gb.apagar_equipo()
 
     except Exception as e:
         guardar_ficheros()
         print("El programa ha finalizado con falllos con éxito")
         print(f"Excepcion {e}")
-        # globales.apagar_equipo()
+        # gb.apagar_equipo()

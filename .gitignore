@@ -11,3 +11,10 @@ imagenes_buenas.txt
 imagenes_malas.txt
 runs
 training
+mi_entorno
+datasets
+__pycache__
+img_temporales
+__pycache__/globales.cpython-38.pyc
+fichero.csv
+__pycache__/globales.cpython-38.pyc
