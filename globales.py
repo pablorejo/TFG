@@ -8,7 +8,7 @@ import numpy as np
 from ultralytics import YOLO
 import pandas as pd
 
-DESORDENAR_DATAFRAME = True # Esto indida si se tiene que desordenar el dataframe o no, es útil para que obtenga los datos aleatoriamente del dataframe.
+DESORDENAR_DATAFRAME = False # Esto indida si se tiene que desordenar el dataframe o no, es útil para que obtenga los datos aleatoriamente del dataframe.
 
 model_path = 'runs/classify/train2/weights/best.pt'  # Cambia esto por la ruta de tu modelo
 model = YOLO(model_path)
@@ -52,7 +52,7 @@ rangos_taxonomicos = [
 porcentaje_validacion = 0.1
 porcentaje_testing = 0.02
 porcentaje_training = 1 - porcentaje_testing - porcentaje_validacion
-numero_de_muestras_imagen = 20 # Esto son el numero de imagenes que se tendran por cada clase distinta como maximo, si no se llega hacemos 
+numero_de_muestras_imagen = 2 # Esto son el numero de imagenes que se tendran por cada clase distinta como maximo, si no se llega hacemos 
 
 def parsear_nombre(nombre):
     reemplazos = {
@@ -153,7 +153,7 @@ def encontrar_imagenes_jpg(directorio: str, num_muestras:int=None):
     
     for root, dirs, files in os.walk(directorio):
         for file in files:
-            if file.lower().endswith('.jpg'):
+            if file.lower().endswith('.webp'):
                 n += 1
                 if num_muestras is None:
                     imagenes_jpg.append(os.path.join(root, file))

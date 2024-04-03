@@ -7,6 +7,14 @@ import requests
 from requests.exceptions import RequestException
 from random import random, randint
 
+rangos_taxonomicos = [
+    'class',
+    'order',
+    'family',
+    'genus'
+    # ,('especie',5)
+]
+
 def entrenar_carpeta(nombre_modelo:str, nombre_carpeta:str):
     """Entrena los datos de una carpeta y sus subcarpetas.
     
@@ -23,73 +31,62 @@ def entrenar_carpeta(nombre_modelo:str, nombre_carpeta:str):
     model = YOLO('yolov8n-cls.pt') 
     results = model.train(data='training.yaml', epochs=gb.epocas_entrenamiento, imgsz=gb.imgsz, name=nombre_modelo)
 
-entrenar_local = False #Esto quiere decir que se va a entrenar de manera local con las imagenes que están ya descargadas en la carpeta definida glovales.carpeta_de_imagenes
-
-if (entrenar_local):
-    for ruta in gb.ruta_training_data.values():
-        gb.vaciar_carpeta(ruta)
-
-    directorios = gb.obtener_directorios(gb.carpeta_de_imagenes,gb.carpeta_de_imagenes)
-    entrenar_carpeta(gb.rangos_taxonomicos[0][0],gb.carpeta_de_imagenes)
-
-    for taxon,indice in gb.rangos_taxonomicos:
-        for nombre in gb.obtener_carpetas_nivel(gb.carpeta_de_imagenes,nivel_max=indice):
-            directorios = gb.obtener_directorios(gb.carpeta_de_imagenes,gb.carpeta_de_imagenes)
-            # nombre_modelo = (f"{taxon}_{nombre.split("/")[-1]}")
-            # entrenar_carpeta(nombre_modelo,nombre)
+def entrenar(
+            str_nombre_modelo_inicio: str = "modelo",
+            model = YOLO('yolov8n-cls.pt'),
+            filtro_columna : str  = "class",
+            filtro: str = None,
+            indice_taxon: int = 0):   
+    
+    chunksize = 10**4
+    gb.vaciar_carpeta(gb.ruta_destino_training) # Vaciamos la carpeta de imagenes de entrenamiento.
+    
+    df_occurrences = pd.read_csv(gb.csv_datos, chunksize=chunksize, delimiter=',', low_memory=False, on_bad_lines='skip')
+    
+    conteos_totales = {} #Contiene un diccionario de el nombre del toponimo con el numero de datos que existen de este.
+    
+    conteos_iniciales = {}
+    dfs = []
+    for chunk in df_occurrences:
+        if (filtro_columna != None and filtro != None):
+            chunk = chunk.loc[chunk[filtro_columna] == filtro] # Filtramos el chunk en caso de ser necesario.
+        
+        values = []
+        keys = []
+        
+        for valor in chunk[filtro_columna].value_counts().values:
+            values.append(valor)
+        for clave in chunk[filtro_columna].value_counts().keys().values:
+            keys.append(clave)
+        
+        for i in range(len(values)):
+            if keys[i] not in conteos_totales:
+                conteos_totales[keys[i]] = 0
+                conteos_iniciales[keys[i]] = 0
+            conteos_totales[keys[i]] += values[i]
             
-else:
-    diferentes_entrenamientos = [
-        "class",
-        "order",
-        "family",
-        "genus",
-        "acceptedScientificName"
-    ]
-
-    for entrenamiento in diferentes_entrenamientos:
-        chunksize = 10**4
-        gb.vaciar_carpeta(gb.ruta_destino_training) # Vaciamos la carpeta de imagenes de entrenamiento.
-        
-        df_occurrences = pd.read_csv(gb.csv_datos, chunksize=chunksize, delimiter=',', low_memory=False, on_bad_lines='skip')
-        conteos_totales = {} #Contiene un diccionario de el nombre del toponimo con el numero de datos que existen de este.
-        
-        conteos_iniciales = {}
-        for chunk in df_occurrences:
-            values = []
-            keys = []
+        dfs.append(chunk)# Añadimos el chunk 
             
-            for valor in chunk[entrenamiento].value_counts().values:
-                values.append(valor)
-            for clave in chunk[entrenamiento].value_counts().keys().values:
-                keys.append(clave)
+    
+    
+    if(gb.DESORDENAR_DATAFRAME):
+        dfs = gb.shuffleDataFrame(dfs)
+    
+    for chunk in dfs:
+        for indice_fila, fila in tqdm(pd.DataFrame(chunk).iterrows(), desc="Procesando elementos", unit="elementos"):
+          
+            if ((filtro_columna == None or filtro == None or fila[filtro_columna] == filtro )):
             
-            for i in range(len(values)):
-                
-                if keys[i] not in conteos_totales:
-                    conteos_totales[keys[i]] = 0
-                    conteos_iniciales[keys[i]] = 0
-                conteos_totales[keys[i]] += values[i]
-                
-        
-        df_occurrences = pd.read_csv(gb.csv_datos, chunksize=chunksize, delimiter=',', low_memory=False, on_bad_lines='skip')
-        ruta_anterior = ""
-        
-        if(gb.DESORDENAR_DATAFRAME):
-            df_occurrences = gb.shuffleDataFrame(df_occurrences)
-        
-        for chunk in df_occurrences:
-            for indice, fila in tqdm(pd.DataFrame(chunk).iterrows(), desc="Procesando elementos", unit="elementos"):
-                if fila[entrenamiento] not in conteos_iniciales:
-                    conteos_iniciales[fila[entrenamiento]] = 0
+                if fila[filtro_columna] not in conteos_iniciales:
+                    conteos_iniciales[fila[filtro_columna]] = 0
                     
-                if conteos_iniciales[fila[entrenamiento]] <= gb.numero_de_muestras_imagen: #Si el taxon ya tiene todas las imagenes necesarias no descarga mas.
+                if conteos_iniciales[fila[filtro_columna]] <= gb.numero_de_muestras_imagen: #Si el taxon ya tiene todas las imagenes necesarias no descarga mas.
                 
                     # Comprobar si la fila tiene un identificador válido
                     if pd.notna(fila['identifier']):
 
                         # Construir la ruta de la carpeta basada en la clasificación taxonómica
-                        ruta_carpeta = f"{gb.ruta_destino_training}/{gb.parsear_nombre(fila[entrenamiento])}"
+                        ruta_carpeta = f"{gb.ruta_destino_training}/{gb.parsear_nombre(fila[filtro_columna])}"
 
                         # Crear la carpeta si no existe
                         if not os.path.exists(ruta_carpeta):
@@ -109,7 +106,7 @@ else:
                                             archivo.write(respuesta.content)
                                             if (gb.descartar_imagen_mala(ruta_completa)):
                                                 ruta_anterior = gb.convert_to_webp(ruta_completa)
-                                                conteos_iniciales[fila[entrenamiento]] += 1
+                                                conteos_iniciales[fila[filtro_columna]] += 1
                                 
                                     # Guardamos los que si que se han completado con exito.
                                     # df_completados = pd.concat([df_completados, pd.DataFrame([fila])], ignore_index=True)
@@ -130,22 +127,78 @@ else:
                                 # Agregar la fila al DataFrame de registros fallidos si ocurre un error
                                 # df_fallidos = pd.concat([df_fallidos, pd.DataFrame([fila])], ignore_index=True)
                 else:
-                    print("Termino el taxon: "+entrenamiento)        
-        # aumentar imagenes
-        for key, value in conteos_iniciales.items():
-            if (value < gb.numero_de_muestras_imagen):
-                ruta_carpeta = f"{gb.ruta_destino_training}/{key}/"
-                imagenes = gb.encontrar_imagenes_jpg(ruta_carpeta)
-                i = 0
-                while value < gb.numero_de_muestras_imagen:
-                    gb.transformar_imagen_webp(ruta_carpeta+imagenes[randint(0,len(imagenes)-1)],i)
-                    i += 1
-                    value += 1
-                
+                    pass
+                        
+    # aumentar imagenes
+    for key, value in conteos_iniciales.items():
+        if (value < gb.numero_de_muestras_imagen):
+            ruta_carpeta = f"{gb.ruta_destino_training}/{key}/"
+            imagenes = gb.encontrar_imagenes_jpg(ruta_carpeta)
+            while value < gb.numero_de_muestras_imagen:
+                gb.transformar_imagen_webp(imagenes[randint(0,len(imagenes)-1)],value)
+                value += 1
+    
+    
+    if (filtro_columna == None or filtro == None):
+        nombre_modelo = str_nombre_modelo_inicio + ".pt"
+    else: 
+        nombre_modelo = str_nombre_modelo_inicio + "_" + filtro_columna +"_" + filtro + ".pt"
         
-        model = YOLO('yolov8n-cls.pt') 
-        nombre_modelo = "modelo_entrenando_"+ entrenamiento + ".pt"
-        carpeta_modelo = 'runs/classify/'+ nombre_modelo
+    carpeta_modelo = 'runs/classify/'+ nombre_modelo
+    
+    if (not os.path.exists(carpeta_modelo)):
+        gb.vaciar_carpeta(carpeta_modelo)
+        os.rmdir(carpeta_modelo)
         
+    results = model.train(epochs=gb.epocas_entrenamiento, imgsz=gb.imgsz, name=nombre_modelo)
+    
+    model = YOLO(nombre_modelo)
+    
+    for key, value in conteos_totales.items():
+        if (indice_taxon < len(rangos_taxonomicos)-1):
+            entrenar(filtro_columna=rangos_taxonomicos[indice_taxon], filtro=key,indice_taxon=indice_taxon+1, model=model)
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+entrenar_local = False #Esto quiere decir que se va a entrenar de manera local con las imagenes que están ya descargadas en la carpeta definida glovales.carpeta_de_imagenes
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+if (entrenar_local):
+    for ruta in gb.ruta_training_data.values():
+        gb.vaciar_carpeta(ruta)
+
+    directorios = gb.obtener_directorios(gb.carpeta_de_imagenes,gb.carpeta_de_imagenes)
+    entrenar_carpeta(gb.rangos_taxonomicos[0][0],gb.carpeta_de_imagenes)
+
+    for taxon,indice in gb.rangos_taxonomicos:
+        for nombre in gb.obtener_carpetas_nivel(gb.carpeta_de_imagenes,nivel_max=indice):
+            directorios = gb.obtener_directorios(gb.carpeta_de_imagenes,gb.carpeta_de_imagenes)
+            # nombre_modelo = (f"{taxon}_{nombre.split("/")[-1]}")
+            # entrenar_carpeta(nombre_modelo,nombre)
             
-        results = model.train(epochs=gb.epocas_entrenamiento, imgsz=gb.imgsz, name=nombre_modelo)
+else:
+    
+    entrenar()
