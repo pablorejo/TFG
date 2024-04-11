@@ -3,8 +3,13 @@ from tqdm import tqdm
 import math, os
 import requests
 from requests.exceptions import RequestException
-import globales as gb
+from globales import *
 
+"""
+    Este fichero se encarga de descargar todas las imagenes de un dataset en una misma carpeta
+    De tal forma que se encarga automaticamente de descartar aquellas imagenes que no nos son útiles mediante un modelo de IA
+    Ademas tambien las reescala y las comvierte al formato .webp para ahorrar espacio
+"""
 def guardar_ficheros():    
     # Guardar el DataFrame de registros fallidos en un archivo CSV
     nombre_fallidos = 'ocurrencias_fallidas.csv'
@@ -61,27 +66,27 @@ if __name__ == '__main__':
                 if pd.notna(fila['identifier']):
 
                     # Construir la ruta de la carpeta basada en la clasificación taxonómica
-                    ruta_carpeta = f"{RUTA_IMAGENES}/{gb.parsear_nombre(fila['class'])}/{gb.parsear_nombre(fila['order'])}/{gb.parsear_nombre(fila['family'])}/{gb.parsear_nombre(fila['genus'])}/{gb.parsear_nombre(fila['acceptedScientificName'])}"
+                    ruta_carpeta = f"{RUTA_IMAGENES}/{parsear_nombre(fila['class'])}/{parsear_nombre(fila['order'])}/{parsear_nombre(fila['family'])}/{parsear_nombre(fila['genus'])}/{parsear_nombre(fila['acceptedScientificName'])}"
 
                     # Crear la carpeta si no existe
                     if not os.path.exists(ruta_carpeta):
                         os.makedirs(ruta_carpeta)
 
                     # Construir la ruta completa del archivo de imagen a guardar
-                    ruta_completa = os.path.join(ruta_carpeta, gb.parsear_nombre(str(fila['gbifID'])) + ".jpg")
+                    ruta_completa = os.path.join(ruta_carpeta, parsear_nombre(str(fila['gbifID'])) + ".jpg")
                     ruta_webp = ruta_completa.replace(".jpg",".webp")
 
 
                     
                     # Descargar y guardar la imagen si aún no existe
-                    if (not os.path.exists(ruta_completa) or gb.es_imagen_corrupta(ruta_completa) and not os.path.exists(ruta_webp)):
+                    if (not os.path.exists(ruta_completa) or es_imagen_corrupta(ruta_completa) and not os.path.exists(ruta_webp)):
                         try:
                             os.remove(ruta_completa)
                             respuesta = requests.get(fila['identifier'],timeout=5)
                             if respuesta.status_code == 200:
                                 with open(ruta_completa, 'wb') as archivo:
                                     archivo.write(respuesta.content)
-                                    gb.convert_to_webp(ruta_completa)
+                                    convert_to_webp(ruta_completa)
                                 # Guardamos los que si que se han completado con exito.
                                 df_completados = pd.concat([df_completados, pd.DataFrame([fila])], ignore_index=True)
                         
@@ -106,10 +111,10 @@ if __name__ == '__main__':
 
         guardar_ficheros()
         print("El programa ha finalizado con éxito")
-        # gb.apagar_equipo()
+        # apagar_equipo()
 
     except Exception as e:
         guardar_ficheros()
         print("El programa ha finalizado con falllos con éxito")
         print(f"Excepcion {e}")
-        # gb.apagar_equipo()
+        # apagar_equipo()

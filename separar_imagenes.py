@@ -2,8 +2,10 @@ import os
 import tkinter as tk
 from PIL import Image, ImageTk  # Importación correcta
 import random
-import globales
+from globales import *
 
+"""Este fichero se usa para crear los dos datasets de las imagenes para el entrenamiento de buenas y malas
+"""
 class ImageOrganizerApp:
     def __init__(self, master: tk.Tk):
         self.master = master
@@ -11,7 +13,7 @@ class ImageOrganizerApp:
 
         self.vaciar_ficheros()
         
-        self.imagenes_jpg = globales.encontrar_imagenes_jpg("imagenes")
+        self.imagenes_jpg = encontrar_imagenes("imagenes",extension='.webp')
         random.shuffle(self.imagenes_jpg)
         self.numero_imagen = 0
 
@@ -63,19 +65,19 @@ class ImageOrganizerApp:
         btn_right.pack(side='right', padx=20)
 
     def left_button_action(self, event=None):
-        with open(globales.nombre_archivo_malas, 'a') as archivo:
+        with open(NOMBRE_ARCHIVO_MALAS, 'a') as archivo:
             archivo.write(self.url + "\n")
         self.siguiente_imagen()
 
     def right_button_action(self, event=None):
-        with open(globales.nombre_archivo_buenas, 'a') as archivo:
+        with open(NOMBRE_ARCHIVO_BUENAS, 'a') as archivo:
             archivo.write(self.url + "\n")
         self.siguiente_imagen()
     
     def vaciar_ficheros(self):
-        with open(globales.nombre_archivo_malas, 'w') as archivo:
+        with open(NOMBRE_ARCHIVO_MALAS, 'w') as archivo:
             archivo.close()
-        with open(globales.nombre_archivo_buenas, 'w') as archivo:
+        with open(NOMBRE_ARCHIVO_BUENAS, 'w') as archivo:
             archivo.close()
         
 

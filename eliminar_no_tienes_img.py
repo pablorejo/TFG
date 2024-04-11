@@ -1,9 +1,8 @@
 import pandas as pd
 from tqdm import tqdm
 
-exit(0)
 pd.set_option('display.max_colwidth', None)
-# Reemplaza 'ruta_del_archivo.txt' con la ruta real de tu archivo
+
 ruta_del_archivo_occurrences = 'ocurrencias.csv'
 
 chunksize = 1 * 10 ** 6 
@@ -24,7 +23,6 @@ for df_occurrences in tqdm(chunks, desc="Procesando elementos", unit="elemento")
     # Eliminar las filas con el campo "identifier" vacío
     df_occurrences = df_occurrences.dropna(subset=['identifier'])
 
-    # print(df_reducido[df_reducido['acceptedScientificName'] == 'Anatina anatina (Spengler, 1802)'][['gbifID', 'acceptedScientificName', 'identifier']])
 
     # Guardar el chunk en el archivo CSV. Usa 'w' (escribir) para el primer chunk y 'a' (añadir) para los siguientes
     df_occurrences.to_csv(nombre_archivo, mode='w' if es_primer_chunk else 'a', index=False, header=es_primer_chunk)
@@ -35,5 +33,3 @@ for df_occurrences in tqdm(chunks, desc="Procesando elementos", unit="elemento")
 
 
 print("El programa ha finalizado con éxito")
-
-

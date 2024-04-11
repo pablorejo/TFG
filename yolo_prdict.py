@@ -1,5 +1,5 @@
 
-import os
+import os, sys
 from ultralytics import YOLO
 
 class Animal:
@@ -34,7 +34,7 @@ def predecir(imgPath):
         imgPath (_type_): _description_
     """
 
-    def predecirBasico(imgPAHT: str, model: YOLO = YOLO('../runs/classify/train2/weights/best.pt' )):
+    def predecirBasico(imgPAHT: str, model: YOLO = YOLO('runs/classify/train2/weights/best.pt' )):
         # Realiza la predicción en la imagen
         results = model(imgPAHT)
 
@@ -65,3 +65,14 @@ def predecir(imgPath):
     animal = Animal(rangos_taxonomicos)
     print(animal.toString())
     return animal
+
+if __name__ == "__main__":
+    if (len(sys.argv) <= 1):
+        print("Falta argumento de la imagen\npython3 yolo_predict.py 'img_path'")
+        exit(-1)
+    
+    imgPath = sys.argv[1]
+    if (not os.path.exists(imgPath)):
+        print(f"La imagen {imgPath} no existe")
+    else:
+        predecir(sys.argv[0])

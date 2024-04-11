@@ -7,24 +7,45 @@ import imageio
 import numpy as np
 from ultralytics import YOLO
 import pandas as pd
+import cv2
 
+# Ejemplo de secuencias de escape ANSI para diferentes colores
+class Colors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m WARNING: '
+    FAIL = '\033[91m ERROR: '
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    
 DESORDENAR_DATAFRAME = False # Esto indida si se tiene que desordenar el dataframe o no, es útil para que obtenga los datos aleatoriamente del dataframe.
+ENTRENAR_LOCAL = False #Esto quiere decir que se va a entrenar de manera local con las imagenes que están ya descargadas en la carpeta definida glovales.carpeta_de_imagenes
+RUTA_IMG_TEMPORALES = "img_temporales" # En esta carpeta se van a descargar temporalmente las imagenes para despues moverlas a la carpeta de entrenamiento
+MODEL_PATH = 'runs/classify/train2/weights/best.pt'  # Cambia esto por la ruta de tu modelo
 
-model_path = 'runs/classify/train2/weights/best.pt'  # Cambia esto por la ruta de tu modelo
-model = YOLO(model_path)
-csv_datos = 'ocurrencias_parseado.csv'
+if(os.path.exists(MODEL_PATH)): 
+    model_descartar = YOLO(MODEL_PATH)
+else:
+    print(f"{Colors.WARNING}No existe el modelo para descartar imagenes: {MODEL_PATH}\nNo se van a descartar las imagenes malas{Colors.ENDC}")
+    
+CSV_DATOS = 'ocurrencias_parseado.csv'
+if(not os.path.exists(CSV_DATOS)):
+    print(f"{Colors.FAIL}No existe el fichero {CSV_DATOS} es necesario crear el fichero con los datos en formato csv{Colors.ENDC}")
+    exit(-1)
 
 Image.MAX_IMAGE_PIXELS = None #Permite que no tenga limite de numero maximo de pixeles.
 
-imgsz = 256
-epocas_entrenamiento = 6
+IMGSZ = 256
+EPOCAS_DE_ENTRENAMIENTO = 6
 
 # Ruta a la carpeta donde se encuentran todas las imaganes
-carpeta_de_imagenes = 'imagenes'
+CARPETA_IMAGENES = 'imagenes'
 
 # Tipos de imagenes en la primera parte del entrenamiento, buenas y malas
-nombre_archivo_buenas = 'imagenes_buenas.txt'
-nombre_archivo_malas = 'imagenes_malas.txt'
+NOMBRE_ARCHIVO_BUENAS = 'imagenes_buenas.txt'
+NOMBRE_ARCHIVO_MALAS = 'imagenes_malas.txt'
 tipos = {
     'buena': 'buenas',
     'mala': 'malas'
@@ -32,15 +53,15 @@ tipos = {
 
 
 # Ruta donde se va van a guardar los datos de entrenamiento
-ruta_destino_training = 'training'
+RUTA_DESTINO_TRAINING = 'datasets\imagenet10'
 ruta_training_data = {
-    'train': os.path.join(ruta_destino_training,'train'),
-    'test': os.path.join(ruta_destino_training,'test'),
-    'valid': os.path.join(ruta_destino_training,'valid'),
+    'train': os.path.join(RUTA_DESTINO_TRAINING,'train'),
+    'test': os.path.join(RUTA_DESTINO_TRAINING,'test'),
+    'valid': os.path.join(RUTA_DESTINO_TRAINING,'valid'),
 }
 
 # Los rangos taxonomicos que existen y su nivel de recursividad en las carpetas para realizar el entrenamiento recursivo
-rangos_taxonomicos = [
+RANGOS_TAXONOMICOS = [
     ('clase',1),
     ('orden',2),
     ('familia',3),
@@ -49,11 +70,15 @@ rangos_taxonomicos = [
 ]
 
 # Para el entrenamiento se establece aquí los distintos porcentajes para el entrenamiento la validacion y el testeo de la aplicacion.
-porcentaje_validacion = 0.1
-porcentaje_testing = 0.02
-porcentaje_training = 1 - porcentaje_testing - porcentaje_validacion
-numero_de_muestras_imagen = 2 # Esto son el numero de imagenes que se tendran por cada clase distinta como maximo, si no se llega hacemos 
+PORCENTAJE_DE_VALIDACION = 0.1
+PORCENTAJE_DE_TESTING = 0.02
+PORCENTAJE_DE_TRAINING = 1 - PORCENTAJE_DE_TESTING - PORCENTAJE_DE_VALIDACION
+NUMERO_DE_MUESTRAS_IMAGEN = 6 # Esto son el numero de imagenes que se tendran por cada clase distinta como maximo, si no se llega hacemos 
 
+if (NUMERO_DE_MUESTRAS_IMAGEN < 3):
+    print(f"{Colors.FAIL}Tiene que haber al menos 3 imagenes por cada categoria{Colors.ENDC}")
+    exit(-1)
+    
 def parsear_nombre(nombre):
     reemplazos = {
         ":": "a",
@@ -64,7 +89,6 @@ def parsear_nombre(nombre):
         "?": "g",
         "*": "h"
     }
-
     nombre = str(nombre)
     for buscar, reemplazar in reemplazos.items():
         nombre = nombre.replace(buscar, reemplazar)
@@ -115,25 +139,33 @@ def copiar_a_training(tipo, file:str):
         random.shuffle(lineas)  # Esto modifica la lista "in-place"
         copiar_a_training(tipo,lineas=lineas)
 
-def copiar_a_training(tipo:str, lineas):
-    """Copia las imagenes a la carpeta de entrenamiento
+def copiar_a_training(path_carpeta:str):
+    """
+    Copia los datos que están en la carpeta path_carpeta hacia la carpeta de entrenamiento
+    """
+    vaciar_carpeta(RUTA_DESTINO_TRAINING) # Vaciamos la carpeta de imagenes de entrenamiento.
     
-    Args:
-    lineas: Array[] con las direcciones de los ficheros a copiar.
-    tipo: tipo de dato ejm: 'Bivalvia', 'Caudofaveata'."""
-    num_valid = math.ceil(len(lineas) * porcentaje_validacion)
-    num_test = math.ceil(len(lineas) * porcentaje_testing)
-    
-    for i in range(num_valid):
-        copiar_archivo(lineas[i], f'{ruta_training_data["valid"]}/{tipo}')
-    
-    for i in range(num_valid,num_valid + num_test):
-        copiar_archivo(lineas[i], f'{ruta_training_data["test"]}/{tipo}')
+    def copiar_a_training(tipo:str, lineas):
+        """Copia las imagenes a la carpeta de entrenamiento
         
-    for i in range(num_valid + num_test, len(lineas)):
-        copiar_archivo(lineas[i], f'{ruta_training_data["train"]}/{tipo}')
-
+        Args:
+        lineas: Array[] con las direcciones de los ficheros a copiar.
+        tipo: tipo de dato ejm: 'Bivalvia', 'Caudofaveata'."""
+        num_valid = math.ceil(len(lineas) * PORCENTAJE_DE_VALIDACION)
+        num_test = math.ceil(len(lineas) * PORCENTAJE_DE_TESTING)
+        
+        for i in range(num_valid):
+            copiar_archivo(lineas[i], os.path.join(ruta_training_data["valid"],tipo))
+        
+        for i in range(num_valid,num_valid + num_test):
+            copiar_archivo(lineas[i], os.path.join(ruta_training_data["test"],tipo))
             
+        for i in range(num_valid + num_test, len(lineas)):
+            copiar_archivo(lineas[i], os.path.join(ruta_training_data["train"],tipo))
+        
+    carpetas = obtener_carpetas_nivel(path_carpeta,1)
+    for carpeta in carpetas:
+        copiar_a_training(carpeta.split('\\')[1],encontrar_imagenes(carpeta,extensions=['.webp','.jpg']))
 
 
 def obtener_directorios(ruta_carpeta):
@@ -143,8 +175,10 @@ def obtener_directorios(ruta_carpeta):
     
     return directorios
 
-def encontrar_imagenes_jpg(directorio: str, num_muestras:int=None):
-    """Obtiene todas las imagenes jpg de un directorio en especifico
+def encontrar_imagenes(directorio: str, num_muestras:int=None, extensions=['.webp']):
+    """
+    Obtiene todas las imagenes jpg de un directorio en especifico
+    Args:
     directorio: path al directorio del que quieres obtener todas las imagenes
     num_muestras: si pones un valor de num_muestras te devolvera ese total de manera aleatoria.
     """
@@ -153,19 +187,19 @@ def encontrar_imagenes_jpg(directorio: str, num_muestras:int=None):
     
     for root, dirs, files in os.walk(directorio):
         for file in files:
-            if file.lower().endswith('.webp'):
-                n += 1
-                if num_muestras is None:
-                    imagenes_jpg.append(os.path.join(root, file))
-                # Si aún no hemos recolectado num_muestras imágenes, simplemente añádelas
-                elif len(imagenes_jpg) < num_muestras:
-                    imagenes_jpg.append(os.path.join(root, file))
-                else:
-                    # Con probabilidad num_muestras/n, reemplaza un elemento aleatorio
-                    s = int(random.random() * n)
-                    if s < num_muestras:
-                        imagenes_jpg[s] = os.path.join(root, file)
-    
+            for extension in extensions:
+                if file.lower().endswith(extension):
+                    n += 1
+                    if num_muestras is None:
+                        imagenes_jpg.append(os.path.join(root, file))
+                    # Si aún no hemos recolectado num_muestras imágenes, simplemente añádelas
+                    elif len(imagenes_jpg) < num_muestras:
+                        imagenes_jpg.append(os.path.join(root, file))
+                    else:
+                        # Con probabilidad num_muestras/n, reemplaza un elemento aleatorio
+                        s = int(random.random() * n)
+                        if s < num_muestras:
+                            imagenes_jpg[s] = os.path.join(root, file)
     return imagenes_jpg
 
 def encontrar_ficheros(directorio):
@@ -199,23 +233,27 @@ def apagar_equipo():
         
 def vaciar_carpeta(ruta_carpeta):
     """Elimina todo lo que esta en una carpeta"""
-    for nombre in os.listdir(ruta_carpeta):
-        ruta_completa = os.path.join(ruta_carpeta, nombre)
-        
-        # Verifica si es un archivo o una carpeta
-        if os.path.isfile(ruta_completa) or os.path.islink(ruta_completa):
-            os.remove(ruta_completa)  # Elimina archivos o enlaces simbólicos
-        elif os.path.isdir(ruta_completa):
-            shutil.rmtree(ruta_completa)  # Elimina subcarpetas y su contenido
+    if (os.path.exists(ruta_carpeta)):
+        for nombre in os.listdir(ruta_carpeta):
+            ruta_completa = os.path.join(ruta_carpeta, nombre)
+            
+            # Verifica si es un archivo o una carpeta
+            if os.path.isfile(ruta_completa) or os.path.islink(ruta_completa):
+                os.remove(ruta_completa)  # Elimina archivos o enlaces simbólicos
+            elif os.path.isdir(ruta_completa):
+                shutil.rmtree(ruta_completa)  # Elimina subcarpetas y su contenido
+    else: 
+        os.mkdir(ruta_carpeta)
+
             
 def obtener_GBIF(path: str):
-    return path.split('/')[-1]
+    return os.path.split(path)[-1]
 
 def copiar_archivo(ruta_origen, ruta_destino):
     """Copia un archivo a una carpeta y si no existe la carpeta la crea"""
     if not os.path.exists(ruta_destino):
         os.makedirs(ruta_destino)
-    shutil.copy(ruta_origen, f'{ruta_destino}/{obtener_GBIF(ruta_origen)}')
+    shutil.copy(ruta_origen, os.path.join(ruta_destino,obtener_GBIF(ruta_origen)))
     
 def convert_to_webp(input_image_path: str, output_image_path = "", quality=100, remove_original=True):
     """
@@ -229,14 +267,15 @@ def convert_to_webp(input_image_path: str, output_image_path = "", quality=100, 
     quality (int): La calidad de la imagen resultante, de 1 a 100.
     remove_original (bool): Si se debe eliminar la imagen original tras la conversión.
     """
-    global imgsz
+    global IMGSZ
     if output_image_path == "":
         output_image_path = input_image_path.split(".")[0] + ".webp"
     try:
         with Image.open(input_image_path) as image:
-            img_adjusted = image.resize((imgsz, imgsz), Image.LANCZOS)
+            img_adjusted = image.resize((IMGSZ, IMGSZ), Image.LANCZOS)
             img_adjusted.save(output_image_path, 'WEBP', quality=quality)
             if remove_original:
+                image.close()
                 os.remove(input_image_path)
 
     except UnidentifiedImageError:
@@ -301,47 +340,44 @@ def descartar_imagen_mala(img_path, preguntar=False,confianza=0.90):
     confianza: la confianza que quieres que tenga el modelo entre(0,1) por defecto 0.85
     
     return: devuelve True si es buena, False si es mala o bien no es un fichero"""
-    # Realiza la predicción en la imagen
-    results = model(img_path)
     
-    # Suponiendo que `results` es una lista de objetos `Results`
-    for result in results:
-        # Accede a las cajas delimitadoras, confianzas, y clases
-        boxes = result.boxes  # Boxes object for bounding box outputs
-        masks = result.masks  # Masks object for segmentation masks outputs
-        keypoints = result.keypoints  # Keypoints object for pose outputs
-        probs = result.probs  # Probs object for classification outputs
+    try:
+        # Realiza la predicción en la imagen
+        results = model_descartar(img_path)
 
-        # Obtiene el índice de la clase top 1 (la más probable)
-        top1_class_index = probs.top1
+        # Suponiendo que `results` es una lista de objetos `Results`
+        for result in results:
+            # Accede a las cajas delimitadoras, confianzas, y clases
+            probs = result.probs  # Probs object for classification outputs
 
-        # Obtiene la confianza de la clase top 1
-        top1_confidence = probs.top1conf
+            # Obtiene el índice de la clase top 1 (la más probable)
+            top1_class_index = probs.top1
 
-        # Obtiene los índices de las top 5 clases
-        top5_class_indices = probs.top5
+            # Obtiene la confianza de la clase top 1
+            top1_confidence = probs.top1conf
 
-        # Obtiene las confidencias de las top 5 clases
-        top5_confidences = probs.top5conf
-
-        if (result.names[top1_class_index] == tipos['mala']):
-            if os.path.isfile(img_path) or os.path.islink(img_path):
-                
-                if (top1_confidence < confianza and preguntar):
-                    image = Image.open(img_path)
-                    # Mostrar la imagen
-                    image.show()
-                    print(f"Clase más probable: {result.names[top1_class_index]} con confianza {top1_confidence}\n")
-                    respuesta = input('¿Desea eliminar la imagen? (s/n)\n')
-                    if (respuesta == 's'):
-                        os.remove(img_path) 
+            if (result.names[top1_class_index] == tipos['mala']):
+                if os.path.isfile(img_path) or os.path.islink(img_path):
+                    
+                    if (top1_confidence < confianza and preguntar):
+                        image = Image.open(img_path)
+                        # Mostrar la imagen
+                        image.show()
+                        print(f"Clase más probable: {result.names[top1_class_index]} con confianza {top1_confidence}\n")
+                        respuesta = input('¿Desea eliminar la imagen? (s/n)\n')
+                        if (respuesta == 's'):
+                            os.remove(img_path) 
+                            return False # La imagen es mala
+                        else: return True # La imagen es buena
+                    else: 
+                        os.remove(img_path)
                         return False # La imagen es mala
-                    else: return True # La imagen es buena
-                else: 
-                    os.remove(img_path)
-                    return False # La imagen es mala
-            else: return False # La imagen no es un fichero
-        else: return True # La imagen es buena
+                else: return False # La imagen no es un fichero
+            else: return True # La imagen es buena
+    except NameError:
+        return True # No existe el modelo para descartar por lo que devuelve true.
+    except Exception as e:
+        print(e)
 
 def shuffleDataFrame(df: pd.DataFrame):
     """Esta función desordena un dataframe para que sea aleatorio y guarda el resultado en un nuevo archivo CSV.
@@ -363,8 +399,31 @@ def shuffleDataFrame(df: pd.DataFrame):
     # Concatenar todos los chunks desordenados en un solo DataFrame.
     shuffled_df = pd.concat(chunks_list, ignore_index=True)
     
-    shuffled_df.to_csv(csv_datos, index=False)
+    shuffled_df.to_csv(CSV_DATOS, index=False)
     # Guardar el DataFrame desordenado en un nuevo archivo CSV.
-    print(f"Archivo desordenado guardado como: {csv_datos}")
+    print(f"Archivo desordenado guardado como: {CSV_DATOS}")
     
     return chunks_list
+
+
+def recortarImagenes(src_img: str, model: YOLO):
+    """
+        Esta función recorta imagenes basandose en un modelo de Inteligencia artificial entrenado que le devuelve las secciones idoneas para recortar la imagen.
+    """
+    image = cv2.imread(src_img)
+    results = model(image)
+    numero = 0
+    for result in results:
+        boxes = result.boxes
+        
+        # Extraer las coordenadas del cuadro delimitador, convertidas a enteros
+        x_min, y_min, x_max, y_max = boxes.numpy().xyxy[0][:4]
+        
+        # Recortar la imagen
+        cropped_img = image[int(y_min):int(y_max), int(x_min):int(x_max)]
+        
+        # Guardar la imagen recortada
+        cropped_img_path = f'{src_img}_cropped_{numero}.jpg'
+        numero +=1
+        cv2.imwrite(cropped_img_path, cropped_img)
+        print(f'Imagen recortada guardada en: {cropped_img_path}')
