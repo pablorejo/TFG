@@ -1,8 +1,0 @@
-#Ejemplo de dataset.yaml
-path: images  # Ruta base a tu dataset; ajusta según sea necesario
-train: train  # Ruta relativa desde `path` a tus imágenes de entrenamiento
-val: valid      # Ruta relativa desde `path` a tus imágenes de validación
-test: test    # Opcional: Ruta relativa desde `path` a tus imágenes de prueba
-
-nc: 12
-names: [Bivalvia, Caudofoveata, Cephalopoda, Cricoconarida, false, Gastropoda, Monoplacophora, nan, Polyplacophora, Rostroconchia, Scaphopoda, Solenogastres]

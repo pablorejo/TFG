@@ -6,13 +6,14 @@ import pandas as pd
 import requests
 from requests.exceptions import RequestException
 from random import  randint
+from functools import reduce
 
 rangos_taxonomicos = [
     'class',
     'order',
     'family',
-    'genus'
-    # ,('especie',5)
+    'genus',
+    'acceptedScientificName'
 ]
 
 def entrenar_carpeta(nombre_modelo:str, nombre_carpeta:str):
@@ -36,8 +37,8 @@ def entrenar_carpeta(nombre_modelo:str, nombre_carpeta:str):
 def entrenar(
             str_nombre_modelo_inicio: str = "modelo",
             model = YOLO('yolov8n-cls.pt'),
-            filtro_columna : str  = "class",
-            filtro: str = None,
+            filtros_columna : list  = [],
+            filtros: list = [],
             indice_taxon: int = 0):   
     
     chunksize = 10**4
@@ -51,8 +52,15 @@ def entrenar(
     conteos_iniciales = {}
     dfs = []
     for chunk in df_occurrences:
-        if (entrenamiento != None and filtro != None):
-            chunk = chunk.loc[chunk[filtro_columna] == filtro] # Filtramos el chunk en caso de ser necesario.
+        if entrenamiento and len(filtros_columna) == len(filtros):
+            # Aplicar cada filtro de columna especificado
+            for col_name, filter_value in zip(filtros_columna, filtros):
+                chunk = chunk[chunk[col_name] == filter_value]
+                
+        # if (entrenamiento != None):
+        #     for k in range(0,len(filtros_columna)-1):
+        #         filtros_aplicados = [chunk[filtros_columna[i]] == filtros[i] for i in range(len(filtros_columna))]
+        #         chunk = chunk[reduce(lambda x, y: x & y, filtros_aplicados)]
         
         values = []
         keys = []
@@ -77,8 +85,15 @@ def entrenar(
     
     for chunk in dfs:
         for indice_fila, fila in tqdm(pd.DataFrame(chunk).iterrows(), desc="Procesando elementos", unit="elementos"):
-          
-            if ((filtro_columna == None or filtro == None or fila[filtro_columna] == filtro )):
+            seguir = True
+            
+            # Como ya est
+            # for k in range(0,len(filtros_columna)-1):
+            #     if (fila[filtros_columna[k]] != filtros[k]):
+            #         seguir = False
+            #         break
+                
+            if seguir:
             
                 if fila[entrenamiento] not in conteos_iniciales:
                     conteos_iniciales[fila[entrenamiento]] = 0
@@ -108,13 +123,15 @@ def entrenar(
                                             archivo.write(respuesta.content)
                                             archivo.close()
                                             if (descartar_imagen_mala(ruta_completa)):
-                                                ruta_anterior = convert_to_webp(ruta_completa)
-                                                conteos_iniciales[fila[entrenamiento]] += 1
+                                                rutas = recortarImagenes(src_img=ruta_completa) 
+                                                for ruta in rutas:
+                                                    convert_to_webp(ruta)
+                                                conteos_iniciales[fila[entrenamiento]] += len(rutas)
                                 
                             
                             except KeyboardInterrupt:
                                 # guardar_ficheros()
-                                print("El programa ha finalizado con falllos con éxito")
+                                print("El programa ha finalizado con fallos con éxito")
                                 exit(-1)
 
                             except RequestException as e:
@@ -135,16 +152,19 @@ def entrenar(
         if (value < NUMERO_DE_MUESTRAS_IMAGEN):
             ruta_carpeta = f"{RUTA_IMG_TEMPORALES}/{key}/"
             imagenes = encontrar_imagenes(ruta_carpeta)
-            while value < NUMERO_DE_MUESTRAS_IMAGEN:
-                transformar_imagen_webp(imagenes[randint(0,len(imagenes)-1)],value)
-                value += 1
+            if (len(imagenes) > 0):
+                while value < NUMERO_DE_MUESTRAS_IMAGEN:
+                    transformar_imagen_webp(imagenes[randint(0,len(imagenes)-1)],value)
+                    value += 1
+            else:
+                print(f"{Colors.WARNING}No hay imagenes de la clase: {key}{Colors.ENDC}")
     
     
-    if (filtro_columna == None or filtro == None):
+    if (len(filtros_columna) == 0):
         nombre_modelo = str_nombre_modelo_inicio 
     else: 
-        nombre_modelo = str_nombre_modelo_inicio + "_" + filtro_columna +"_" + filtro 
-        
+        nombre_modelo = str_nombre_modelo_inicio + "_" + filtros_columna[-1] +"_" + filtros[-1] 
+    
     carpeta_modelo = 'runs/classify/'+ nombre_modelo
     
     if (os.path.exists(carpeta_modelo)):
@@ -154,11 +174,15 @@ def entrenar(
     copiar_a_training(RUTA_IMG_TEMPORALES)
     print("Entrenando: " + nombre_modelo)
     results = model.train(epochs=EPOCAS_DE_ENTRENAMIENTO, imgsz=IMGSZ, name=nombre_modelo)
-    model = YOLO(os.path.join(carpeta_modelo,'weights','best.pt'))
+    model = YOLO(os.path.join(carpeta_modelo,'weights','best.pt'),task='')
+
     for key, value in conteos_totales.items():
         if (indice_taxon < len(rangos_taxonomicos)-1):
-            entrenar(filtro_columna=rangos_taxonomicos[indice_taxon], filtro=key,indice_taxon=indice_taxon+1, model=model)
-        
+            filtros_columna.append(rangos_taxonomicos[indice_taxon])
+            filtros.append(key)
+            entrenar(filtros_columna=filtros_columna, filtros=filtros,indice_taxon=indice_taxon+1, model=model)
+        else:
+            print(f"{Colors.OKGREEN}Termino el {filtros_columna} de {filtros}")
 
 if __name__ == "__main__":
     if (ENTRENAR_LOCAL):

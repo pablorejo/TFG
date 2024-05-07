@@ -29,7 +29,6 @@ class Animal:
         
 def predecir(imgPath):
     """Esta funcion nos devuelve una clase imagen que contiene las caracteristicas de este animal
-
     Args:
         imgPath (_type_): _description_
     """

@@ -23,19 +23,28 @@ class Colors:
 DESORDENAR_DATAFRAME = False # Esto indida si se tiene que desordenar el dataframe o no, es útil para que obtenga los datos aleatoriamente del dataframe.
 ENTRENAR_LOCAL = False #Esto quiere decir que se va a entrenar de manera local con las imagenes que están ya descargadas en la carpeta definida glovales.carpeta_de_imagenes
 RUTA_IMG_TEMPORALES = "img_temporales" # En esta carpeta se van a descargar temporalmente las imagenes para despues moverlas a la carpeta de entrenamiento
-MODEL_PATH = 'runs/classify/train2/weights/best.pt'  # Cambia esto por la ruta de tu modelo
+RUTA_IMG_DETECCION = "imagenes_deteccion"
 
-if(os.path.exists(MODEL_PATH)): 
-    model_descartar = YOLO(MODEL_PATH)
+MODEL_DESCARTAR_PATH = 'yolo_modelos/yolo_discard.pt' 
+if(os.path.exists(MODEL_DESCARTAR_PATH)): 
+    model_descartar = YOLO(MODEL_DESCARTAR_PATH)
 else:
-    print(f"{Colors.WARNING}No existe el modelo para descartar imagenes: {MODEL_PATH}\nNo se van a descartar las imagenes malas{Colors.ENDC}")
+    print(f"{Colors.WARNING}No existe el modelo para descartar imagenes: {MODEL_DESCARTAR_PATH}\nNo se van a descartar las imagenes malas{Colors.ENDC}")
     
+    
+MODEL_DETECT_PATH = 'yolo_modelos/yolo_detect.pt'
+if(os.path.exists(MODEL_DETECT_PATH)): 
+    model_detect = YOLO(MODEL_DETECT_PATH)
+else:
+    print(f"{Colors.WARNING}No existe el modelo para detectar imagenes: {MODEL_DETECT_PATH}\nNo se van a detectar las imagenes{Colors.ENDC}")
+    
+
 CSV_DATOS = 'ocurrencias_parseado.csv'
 if(not os.path.exists(CSV_DATOS)):
     print(f"{Colors.FAIL}No existe el fichero {CSV_DATOS} es necesario crear el fichero con los datos en formato csv{Colors.ENDC}")
     exit(-1)
 
-Image.MAX_IMAGE_PIXELS = None #Permite que no tenga limite de numero maximo de pixeles.
+Image.MAX_IMAGE_PIXELS = None # Permite que no tenga limite de numero maximo de pixeles.
 
 IMGSZ = 640
 EPOCAS_DE_ENTRENAMIENTO = 6
@@ -54,11 +63,17 @@ tipos = {
 
 # Ruta donde se va van a guardar los datos de entrenamiento
 RUTA_DESTINO_TRAINING = 'datasets/imagenet10'
-
 ruta_training_data = {
     'train': os.path.join(RUTA_DESTINO_TRAINING,'train'),
     'test': os.path.join(RUTA_DESTINO_TRAINING,'test'),
     'valid': os.path.join(RUTA_DESTINO_TRAINING,'valid'),
+}
+
+RUTA_DESTINO_TRAINING_DETECT = 'datasets/detect'
+ruta_training_detect_data = {
+    'train': os.path.join(RUTA_DESTINO_TRAINING_DETECT,'train'),
+    'test': os.path.join(RUTA_DESTINO_TRAINING_DETECT,'test'),
+    'valid': os.path.join(RUTA_DESTINO_TRAINING_DETECT,'valid'),
 }
 
 # Los rangos taxonomicos que existen y su nivel de recursividad en las carpetas para realizar el entrenamiento recursivo
@@ -74,7 +89,7 @@ RANGOS_TAXONOMICOS = [
 PORCENTAJE_DE_VALIDACION = 0.1
 PORCENTAJE_DE_TESTING = 0.02
 PORCENTAJE_DE_TRAINING = 1 - PORCENTAJE_DE_TESTING - PORCENTAJE_DE_VALIDACION
-NUMERO_DE_MUESTRAS_IMAGEN = 6 # Esto son el numero de imagenes que se tendran por cada clase distinta como maximo, si no se llega hacemos 
+NUMERO_DE_MUESTRAS_IMAGEN = 3 # Esto son el numero de imagenes que se tendran por cada clase distinta como maximo, si no se llega hacemos 
 
 if (NUMERO_DE_MUESTRAS_IMAGEN < 3):
     print(f"{Colors.FAIL}Tiene que haber al menos 3 imagenes por cada categoria{Colors.ENDC}")
@@ -135,11 +150,72 @@ def copiar_a_training(tipo, file:str):
     Args:
     file: fichero que contine las direcciones de los ficheros a copiar separados por \\n.
     tipo: tipo de dato ejm: 'Bivalvia', 'Caudofaveata'."""
+    
     with open(file) as file:
         lineas = file.read().splitlines()
         random.shuffle(lineas)  # Esto modifica la lista "in-place"
         copiar_a_training(tipo,lineas=lineas)
+        
+        
+def copiar_a_training_deteccion(path_carpeta:str):
+    """
+    Copia los datos que están en la carpeta path_carpeta hacia la carpeta de entrenamiento junto con sus txt asociado a la imagen
+    """
+    
+    eliminar_imagenes_sin_txt(RUTA_IMG_DETECCION) # En caso de que existan imagenes en este direcctorio que no tengan deteccion seran eliminadas
+    vaciar_carpeta(RUTA_DESTINO_TRAINING_DETECT) # Vaciamos la carpeta de imagenes de entrenamiento.
+    
+    def copiar_a_training(lineas):
+        """Copia las imagenes a la carpeta de entrenamiento
+        Args:
+        lineas: Array[] con las direcciones de los ficheros a copiar.
+        tipo: tipo de dato ejm: 'Bivalvia', 'Caudofaveata'."""
+        if (len(lineas) >= 3):
+            num_valid = math.ceil(len(lineas) * PORCENTAJE_DE_VALIDACION)
+            num_test = math.ceil(len(lineas) * PORCENTAJE_DE_TESTING)
+            
+            for i in range(num_valid):
+                copiar_archivo(lineas[i], os.path.join(ruta_training_detect_data["valid"]),txt_asociado=True)
+            
+            for i in range(num_valid,num_valid + num_test):
+                copiar_archivo(lineas[i], os.path.join(ruta_training_detect_data["test"]),txt_asociado=True)
+                
+            for i in range(num_valid + num_test, len(lineas)):
+                copiar_archivo(lineas[i], os.path.join(ruta_training_detect_data["train"]),txt_asociado=True)
+        else:
+            print(f"{Colors.WARNING}No hay sufucientes imagenes{Colors.ENDC}\nImagenes:\n")
+            for linea in lineas:
+                print (linea + "\n")
+            print("Fin imagenes\n\n")
+            
+    copiar_a_training(encontrar_imagenes(path_carpeta,extensions=['.webp','.jpg']))
+    
 
+def eliminar_imagenes_sin_txt(directorio):
+    """Elimina todas las imagenes de un directorio y los subdirectorios que no tengan un fichero de igual nombre terminado en txt"""
+    
+    # Lista todos los archivos en el directorio
+    archivos = os.listdir(directorio)
+    
+    # Crea un set de nombres base para los archivos .txt
+    nombres_base_txt = {os.path.splitext(archivo)[0] for archivo in archivos if archivo.endswith('.txt')}
+    
+    # Contador para las imágenes eliminadas
+    imagenes_eliminadas = 0
+    
+    # Revisa cada archivo en el directorio
+    for archivo in archivos:
+        if archivo.endswith(('.png', '.jpg', '.jpeg')):  # Agrega otros formatos de imagen si es necesario
+            nombre_base_imagen = os.path.splitext(archivo)[0]
+            
+            # Si el nombre base de la imagen no está en el set de nombres base .txt, elimina la imagen
+            if nombre_base_imagen not in nombres_base_txt:
+                os.remove(os.path.join(directorio, archivo))
+                imagenes_eliminadas += 1
+                print(f"Eliminada: {archivo}")
+    
+    print(f"Total de imágenes eliminadas: {imagenes_eliminadas}")
+    
 def copiar_a_training(path_carpeta:str):
     """
     Copia los datos que están en la carpeta path_carpeta hacia la carpeta de entrenamiento
@@ -152,17 +228,23 @@ def copiar_a_training(path_carpeta:str):
         Args:
         lineas: Array[] con las direcciones de los ficheros a copiar.
         tipo: tipo de dato ejm: 'Bivalvia', 'Caudofaveata'."""
-        num_valid = math.ceil(len(lineas) * PORCENTAJE_DE_VALIDACION)
-        num_test = math.ceil(len(lineas) * PORCENTAJE_DE_TESTING)
-        
-        for i in range(num_valid):
-            copiar_archivo(lineas[i], os.path.join(ruta_training_data["valid"],tipo))
-        
-        for i in range(num_valid,num_valid + num_test):
-            copiar_archivo(lineas[i], os.path.join(ruta_training_data["test"],tipo))
+        if (len(lineas) >= 3):
+            num_valid = math.ceil(len(lineas) * PORCENTAJE_DE_VALIDACION)
+            num_test = math.ceil(len(lineas) * PORCENTAJE_DE_TESTING)
             
-        for i in range(num_valid + num_test, len(lineas)):
-            copiar_archivo(lineas[i], os.path.join(ruta_training_data["train"],tipo))
+            for i in range(num_valid):
+                copiar_archivo(lineas[i], os.path.join(ruta_training_data["valid"],tipo))
+            
+            for i in range(num_valid,num_valid + num_test):
+                copiar_archivo(lineas[i], os.path.join(ruta_training_data["test"],tipo))
+                
+            for i in range(num_valid + num_test, len(lineas)):
+                copiar_archivo(lineas[i], os.path.join(ruta_training_data["train"],tipo))
+        else:
+            print(f"{Colors.WARNING}No hay sufucientes imagenes{Colors.ENDC}\nImagenes:\n")
+            for linea in lineas:
+                print (linea + "\n")
+            print("Fin imagenes\n\n")
         
     carpetas = obtener_carpetas_nivel(path_carpeta,1)
     for carpeta in carpetas:
@@ -256,7 +338,7 @@ def copiar_archivo(ruta_origen, ruta_destino):
         os.makedirs(ruta_destino)
     shutil.copy(ruta_origen, os.path.join(ruta_destino,obtener_GBIF(ruta_origen)))
     
-def convert_to_webp(input_image_path: str, output_image_path = "", quality=100, remove_original=True):
+def convert_to_webp(input_image_path: str, output_image_path = "", quality=100, remove_original=True, only_rescal = False):
     """
     Convierte una imagen a formato WebP y la ajusta a un tamaño de imagen concreto.
 
@@ -274,10 +356,13 @@ def convert_to_webp(input_image_path: str, output_image_path = "", quality=100, 
     try:
         with Image.open(input_image_path) as image:
             img_adjusted = image.resize((IMGSZ, IMGSZ), Image.LANCZOS)
-            img_adjusted.save(output_image_path, 'WEBP', quality=quality)
-            if remove_original:
+            if (not only_rescal):
+                img_adjusted.save(output_image_path, 'WEBP', quality=quality)
+                if remove_original:
+                    image.close()
+                    os.remove(input_image_path)
+            else:
                 image.close()
-                os.remove(input_image_path)
 
     except UnidentifiedImageError:
         print(f"Imagen no identificable: {input_image_path}, se procede a eliminar.")
@@ -407,24 +492,52 @@ def shuffleDataFrame(df: pd.DataFrame):
     return chunks_list
 
 
-def recortarImagenes(src_img: str, model: YOLO):
+def recortarImagenes(src_img: str, model: YOLO = None, delete_original: bool = True):
     """
-        Esta función recorta imagenes basandose en un modelo de Inteligencia artificial entrenado que le devuelve las secciones idoneas para recortar la imagen.
+    Esta función recorta imágenes basándose en un modelo de inteligencia artificial.
+    
+    Args:
+    src_img: ruta a la imgagen. 
+    model: modelo para deteccion.
+    
+    return: devuelve un array con las direcciones de las imagenes recortadas
     """
     image = cv2.imread(src_img)
-    results = model(image)
+    if image is None:
+        print(f"Error al leer la imagen: {src_img}")
+        return
+
+    if model != None:
+        results = model(image)
+    else:
+        results = model_detect(image)
+
+    base_name, _ = os.path.splitext(src_img)
     numero = 0
+    rutas = []
+
     for result in results:
+        # Obtiene todas las cajas delimitadoras
         boxes = result.boxes
-        
-        # Extraer las coordenadas del cuadro delimitador, convertidas a enteros
-        x_min, y_min, x_max, y_max = boxes.numpy().xyxy[0][:4]
-        
-        # Recortar la imagen
-        cropped_img = image[int(y_min):int(y_max), int(x_min):int(x_max)]
-        
-        # Guardar la imagen recortada
-        cropped_img_path = f'{src_img}_cropped_{numero}.jpg'
-        numero +=1
-        cv2.imwrite(cropped_img_path, cropped_img)
-        print(f'Imagen recortada guardada en: {cropped_img_path}')
+
+        for box in boxes:
+            # Extraer las coordenadas del cuadro delimitador, convertidas a enteros
+            x_min, y_min, x_max, y_max = map(int, box.xyxy[0])
+            
+            # Recortar la imagen usando las coordenadas
+            cropped_img = image[y_min:y_max, x_min:x_max]
+
+            # Guardar la imagen recortada
+            cropped_img_path = f'{base_name}_cropped_{numero}.jpg'
+            cv2.imwrite(cropped_img_path, cropped_img)
+            
+            if descartar_imagen_mala(cropped_img_path):
+                numero += 1
+                rutas.append(cropped_img_path)
+                print(f'Imagen recortada guardada en: {cropped_img_path}')
+                
+    if delete_original:
+        os.remove(src_img)
+    else:
+        rutas.append(src_img)
+    return rutas

@@ -18,3 +18,7 @@ img_temporales
 fichero.csv
 __pycache__/globales.cpython-38.pyc
 filas_pequeño.csv
+__pycache__/globales.cpython-38.pyc
+imagenes_deteccion
+pandas_ficheros
+imagenes_deteccion.zip
