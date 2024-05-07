@@ -37,7 +37,7 @@ if(not os.path.exists(CSV_DATOS)):
 
 Image.MAX_IMAGE_PIXELS = None #Permite que no tenga limite de numero maximo de pixeles.
 
-IMGSZ = 256
+IMGSZ = 640
 EPOCAS_DE_ENTRENAMIENTO = 6
 
 # Ruta a la carpeta donde se encuentran todas las imaganes
@@ -53,7 +53,8 @@ tipos = {
 
 
 # Ruta donde se va van a guardar los datos de entrenamiento
-RUTA_DESTINO_TRAINING = 'datasets\imagenet10'
+RUTA_DESTINO_TRAINING = 'datasets/imagenet10'
+
 ruta_training_data = {
     'train': os.path.join(RUTA_DESTINO_TRAINING,'train'),
     'test': os.path.join(RUTA_DESTINO_TRAINING,'test'),
@@ -165,7 +166,7 @@ def copiar_a_training(path_carpeta:str):
         
     carpetas = obtener_carpetas_nivel(path_carpeta,1)
     for carpeta in carpetas:
-        copiar_a_training(carpeta.split('\\')[1],encontrar_imagenes(carpeta,extensions=['.webp','.jpg']))
+        copiar_a_training(os.path.split(carpeta)[1],encontrar_imagenes(carpeta,extensions=['.webp','.jpg']))
 
 
 def obtener_directorios(ruta_carpeta):

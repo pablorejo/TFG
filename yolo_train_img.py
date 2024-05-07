@@ -37,8 +37,8 @@ def entrenar(
             str_nombre_modelo_inicio: str = "modelo",
             model = YOLO('yolov8n-cls.pt'),
             filtro_columna : str  = "class",
-            filtro: str = "Bivalvia",
-            indice_taxon: int = 1):   
+            filtro: str = None,
+            indice_taxon: int = 0):   
     
     chunksize = 10**4
     vaciar_carpeta(RUTA_IMG_TEMPORALES) # Vaciamos la carpeta de imagenes de entrenamiento.

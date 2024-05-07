@@ -16,3 +16,5 @@ datasets
 __pycache__
 img_temporales
 fichero.csv
+__pycache__/globales.cpython-38.pyc
+filas_pequeño.csv
