@@ -2,7 +2,8 @@
 import os, sys
 from ultralytics import YOLO
 from globales import *
-from funciones import *
+from funciones import recortar_imagenes
+
 class Animal:
     
     def __init__(self,rangos_taxonomicos: dict):
