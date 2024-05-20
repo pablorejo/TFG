@@ -12,6 +12,7 @@ imagenes_malas.txt
 runs
 training
 mi_entorno
+yolo_modelos
 datasets
 __pycache__
 img_temporales
@@ -22,3 +23,12 @@ __pycache__/globales.cpython-38.pyc
 imagenes_deteccion
 pandas_ficheros
 imagenes_deteccion.zip
+__pycache__/globales.cpython-38.pyc
+yolov8n-cls.pt
+pandas_ficheros.zip
+prueba_1.csv
+__pycache__/globales.cpython-38.pyc
+prueba.webp
+__pycache__/globales.cpython-38.pyc
+yolo_modelos/yolo_detect.pt
+yolo_modelos/yolo_detect.pt

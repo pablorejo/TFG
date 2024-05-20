@@ -4,7 +4,7 @@ import math, os
 import requests
 from requests.exceptions import RequestException
 from globales import *
-
+from funciones import *
 """
     Este fichero se encarga de descargar todas las imagenes de un dataset en una misma carpeta
     De tal forma que se encarga automaticamente de descartar aquellas imagenes que no nos son útiles mediante un modelo de IA

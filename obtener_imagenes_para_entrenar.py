@@ -7,7 +7,7 @@ import requests
 from requests.exceptions import RequestException
 from random import  randint
 from functools import reduce
-
+from funciones import *
 
 
 def descargar_imagenes_aleatorio(n_imagenes_descargar = 1000, todas = False):  
@@ -15,18 +15,18 @@ def descargar_imagenes_aleatorio(n_imagenes_descargar = 1000, todas = False):
     Esta funcion lo que hace es descargar un numero predeterminado de imagenes de un archivo de pandas de forma aleatoria
     Args:
     n_imagenes_descargar = Es el numero de imagenes que se van a descargar
-    todas = boleano que indica si se tienen que descargar todas las imagenes o no""" 
+    todas = boleano que indica si se tienen que descargar todas las imágenes o no, esto quiere decir que si se tienen que descartar las imágenes malas o no""" 
     
     chunksize = 10**4
     df_occurrences = pd.read_csv(CSV_DATOS, chunksize=chunksize, delimiter=',', low_memory=False, on_bad_lines='skip')
     
     if(DESORDENAR_DATAFRAME):
-        df_occurrences = shuffleDataFrame(df_occurrences)
+        df_occurrences = shuffle_DataFrame(df_occurrences)
     n_imagenes = 0
     
     CARPETA_IMAGENES_ENTRENAR_DETECCION = 'imagenes_deteccion'
     
-    vaciar_carpeta(CARPETA_IMAGENES_ENTRENAR_DETECCION)
+    vaciar_carpeta(RUTA_IMG_DETECCION)
     
     for chunk in df_occurrences:
         if (n_imagenes == n_imagenes_descargar):
@@ -38,7 +38,7 @@ def descargar_imagenes_aleatorio(n_imagenes_descargar = 1000, todas = False):
                     if pd.notna(fila['identifier']):
 
                         # Construir la ruta de la carpeta basada en la clasificación taxonómica
-                        ruta_carpeta = CARPETA_IMAGENES_ENTRENAR_DETECCION
+                        ruta_carpeta = RUTA_IMG_DETECCION
 
                         # Crear la carpeta si no existe
                         if not os.path.exists(ruta_carpeta):
@@ -56,13 +56,19 @@ def descargar_imagenes_aleatorio(n_imagenes_descargar = 1000, todas = False):
                                         with open(ruta_completa, 'wb') as archivo:
                                             archivo.write(respuesta.content)
                                             archivo.close()
+                                                    
                                             if not todas:
                                                 if (descartar_imagen_mala(ruta_completa)):
+                                                    if model_detect != None:
+                                                        recortar_imagenes(ruta_completa,delete_original=False)
                                                     ruta_anterior = convert_to_webp(ruta_completa,only_rescal=True)
                                                     n_imagenes += 1
                                             else:
                                                 ruta_anterior = convert_to_webp(ruta_completa,only_rescal=True)
                                                 n_imagenes += 1
+                                            
+                                            
+                                                
                             
                             except KeyboardInterrupt:
                                 # guardar_ficheros()

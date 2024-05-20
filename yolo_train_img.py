@@ -7,6 +7,7 @@ import requests
 from requests.exceptions import RequestException
 from random import  randint
 from functools import reduce
+from funciones import *
 
 rangos_taxonomicos = [
     'class',
@@ -81,7 +82,7 @@ def entrenar(
     
     
     if(DESORDENAR_DATAFRAME):
-        dfs = shuffleDataFrame(dfs)
+        dfs = shuffle_DataFrame(dfs)
     
     for chunk in dfs:
         for indice_fila, fila in tqdm(pd.DataFrame(chunk).iterrows(), desc="Procesando elementos", unit="elementos"):
@@ -123,7 +124,7 @@ def entrenar(
                                             archivo.write(respuesta.content)
                                             archivo.close()
                                             if (descartar_imagen_mala(ruta_completa)):
-                                                rutas = recortarImagenes(src_img=ruta_completa) 
+                                                rutas = recortar_imagenes(src_img=ruta_completa) 
                                                 for ruta in rutas:
                                                     convert_to_webp(ruta)
                                                 conteos_iniciales[fila[entrenamiento]] += len(rutas)
@@ -170,20 +171,33 @@ def entrenar(
     if (os.path.exists(carpeta_modelo)):
         vaciar_carpeta(carpeta_modelo)
         os.rmdir(carpeta_modelo)
+    
+    
         
-    copiar_a_training(RUTA_IMG_TEMPORALES)
-    print("Entrenando: " + nombre_modelo)
-    results = model.train(epochs=EPOCAS_DE_ENTRENAMIENTO, imgsz=IMGSZ, name=nombre_modelo)
-    model = YOLO(os.path.join(carpeta_modelo,'weights','best.pt'),task='')
+    # se copian los datos de las imagenes temporales a la carpeta de entrenamiento, en caso de que estea vacio devuelve true por lo que no se hace el entrenamienteo
+    if copiar_a_training(RUTA_IMG_TEMPORALES): 
+        print("Entrenando: " + nombre_modelo)
+        results = model.train(epochs=EPOCAS_DE_ENTRENAMIENTO, imgsz=IMGSZ, name=nombre_modelo)
+        
+        # Ahora si llegamos a la parte de identificar la especie con lo cual el rango_taxonómico será el ultimo de la lista lo que hacemos es guardar
+        # la lista de los filtros en un fichero.txt para el analisis de los resultados 
+        if rangos_taxonomicos[indice_taxon] == rangos_taxonomicos[-1]:
+            with open(os.path.join(carpeta_modelo,'data.txt'),'w') as file:
+                for filtro in filtros:
+                    file.write(filtro + ",")     
+                
+        model = YOLO(os.path.join(carpeta_modelo,'weights','best.pt'),task='')
 
-    for key, value in conteos_totales.items():
-        if (indice_taxon < len(rangos_taxonomicos)-1):
-            filtros_columna.append(rangos_taxonomicos[indice_taxon])
-            filtros.append(key)
-            entrenar(filtros_columna=filtros_columna, filtros=filtros,indice_taxon=indice_taxon+1, model=model)
-        else:
-            print(f"{Colors.OKGREEN}Termino el {filtros_columna} de {filtros}")
-
+        for key, value in conteos_totales.items():
+            if (indice_taxon < len(rangos_taxonomicos)-1):
+                filtros_columna.append(rangos_taxonomicos[indice_taxon])
+                filtros.append(key)
+                entrenar(filtros_columna=filtros_columna, filtros=filtros,indice_taxon=indice_taxon+1, model=model)
+            else:
+                print(f"{Colors.OKGREEN}Termino el {filtros_columna} de {filtros}{Colors.ENDC}")
+    else:
+        print(f"{Colors.OKGREEN}No existen datos para estos filtros\n {filtros_columna}\n{filtros}{Colors.ENDC}")
+        
 if __name__ == "__main__":
     if (ENTRENAR_LOCAL):
         for ruta in ruta_training_data.values():

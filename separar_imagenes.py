@@ -3,7 +3,7 @@ import tkinter as tk
 from PIL import Image, ImageTk  # Importación correcta
 import random
 from globales import *
-
+from funciones import encontrar_imagenes
 """Este fichero se usa para crear los dos datasets de las imagenes para el entrenamiento de buenas y malas
 """
 class ImageOrganizerApp:
@@ -13,7 +13,7 @@ class ImageOrganizerApp:
 
         self.vaciar_ficheros()
         
-        self.imagenes_jpg = encontrar_imagenes("imagenes",extension='.webp')
+        self.imagenes_jpg = encontrar_imagenes("imagenes",extensions=['.webp'])
         random.shuffle(self.imagenes_jpg)
         self.numero_imagen = 0
 

@@ -1,24 +1,18 @@
 
 import os, sys
 from ultralytics import YOLO
-
+from globales import *
+from funciones import *
 class Animal:
     
-    def __init__(self, clase, orden, familia, genero, especie,rangos_taxonomicos: dict):
-        if (rangos_taxonomicos == None):
-            self.clase = clase
-            self.orden = orden
-            self.familia = familia
-            self.genero = genero
-            self.especie = especie
-        else:
-            self.clase = rangos_taxonomicos['clase']
-            self.orden = rangos_taxonomicos['orden']
-            self.familia = rangos_taxonomicos['familia']
-            self.genero = rangos_taxonomicos['genero']
-            self.especie = rangos_taxonomicos['especie']
+    def __init__(self,rangos_taxonomicos: dict):
+        self.clase = rangos_taxonomicos['clase']
+        self.orden = rangos_taxonomicos['orden']
+        self.familia = rangos_taxonomicos['familia']
+        self.genero = rangos_taxonomicos['genero']
+        self.especie = rangos_taxonomicos['especie']
         
-    def toString(self):
+    def to_string(self):
         cadena = f"clase: {self.clase}"
         cadena = cadena + f"\norden: {self.orden}"
         cadena = cadena + f"\nfamilia: {self.familia}"
@@ -26,14 +20,14 @@ class Animal:
         cadena = cadena + f"\nespecie: {self.especie}"
         return cadena
     
+    def poner_imagen(self, img_ruta):
+        self.img_ruta = img_ruta
         
-def predecir(imgPath):
-    """Esta funcion nos devuelve una clase imagen que contiene las caracteristicas de este animal
-    Args:
-        imgPath (_type_): _description_
-    """
+    def set_rastro(self, rastro):
+        self.rastro = rastro
 
-    def predecirBasico(imgPAHT: str, model: YOLO = YOLO('runs/classify/train2/weights/best.pt' )):
+
+def predecir_basico(imgPAHT: str, model: YOLO = YOLO('runs/classify/train2/weights/best.pt' )):
         # Realiza la predicción en la imagen
         results = model(imgPAHT)
 
@@ -41,9 +35,17 @@ def predecir(imgPath):
         for result in results:
             probs = result.probs  # Probs object for classification outputs
             # Obtiene el índice de la clase top 1 (la más probable)
-            top1_class_index = probs.top1
-            return top1_class_index
-        
+            top5_str = []
+            for top in probs.top5:
+                top5_str.append(result.names[top])
+            
+            return top5_str, probs.top1conf
+            
+def predecir_imagen(img_path: str):
+    """Esta funcion nos devuelve una clase imagen que contiene las caracteristicas de este animal
+    Args:
+        imgPath (str): ruta a la imagen a predecir
+    """
 
     rangos_taxonomicos = [
         'clase',
@@ -53,25 +55,61 @@ def predecir(imgPath):
         'especie',
     ]
     
-    animal = Animal()
     taxones = {}
+    top5_resultado_bool = False
+    top5_resultado = []
+    nombre_modelo = ""
+    rastro =  []
     for taxon in rangos_taxonomicos:
-        str_modelo = f'/runs/classify/modelo_entrenando_{taxon}/weights/best.pt'
+        str_modelo = f'runs/classify/modelo_entrenando_{nombre_modelo}/weights/best.pt'
         model = YOLO(str_modelo)
-        predicho = predecirBasico(imgPAHT=imgPath,model=model)
-        taxones[taxon] = predicho
+        top5,conf = predecir_basico(imgPAHT=img_path,model=model)
+        if conf < CONF_TOP_5 and not top5_resultado_bool:
+            top5_resultado_bool = True
+            top5_resultado = top5
+        
+        rastro.append(conf)
+        nombre_modelo = "_" + top5[0]
+        taxones[taxon] = top5[0]
     
     animal = Animal(rangos_taxonomicos)
-    print(animal.toString())
+    animal.set_rastro(rastro)
+    
+    info(animal.toString())
     return animal
+
+def predecir_imagenes(imagenes):
+    
+    
+    for imagen in imagenes:
+        animal = Animal(predecir_imagen(imagen))
+        animal.rastro
+    
+    pass
+
+def predecir(args:str):
+    
+    imagenes = args.split(',')
+    animales = []
+    if len(imagenes) == 1:
+        imagenes_cropped = recortar_imagenes(imagenes[0],delete_original=False)
+        for imagen in imagenes_cropped:
+            animal = Animal(predecir_imagen(imagen))
+            animal.poner_imagen(imagen)
+    elif len(imagenes) > 1:
+        predecir_imagenes(imagenes)
+    else:
+        fail("No se han proporcionado imagenes")
+        exit(0)
+        
+        
+        
 
 if __name__ == "__main__":
     if (len(sys.argv) <= 1):
-        print("Falta argumento de la imagen\npython3 yolo_predict.py 'img_path'")
+        fail("Falta argumento de la imagen\npython3 yolo_predict.py 'img_path'")
         exit(-1)
     
-    imgPath = sys.argv[1]
-    if (not os.path.exists(imgPath)):
-        print(f"La imagen {imgPath} no existe")
     else:
-        predecir(sys.argv[0])
+        predecir('prueba.webp')
+        # predecir(sys.argv[1])
