@@ -3,118 +3,118 @@ from tqdm import tqdm
 import math, os
 import requests
 from requests.exceptions import RequestException
-from globales import *
-from funciones import *
-"""
-    Este fichero se encarga de descargar todas las imagenes de un dataset en una misma carpeta
-    De tal forma que se encarga automaticamente de descartar aquellas imagenes que no nos son útiles mediante un modelo de IA
-    Ademas tambien las reescala y las comvierte al formato .webp para ahorrar espacio
-"""
-def guardar_ficheros():    
-    # Guardar el DataFrame de registros fallidos en un archivo CSV
-    nombre_fallidos = 'ocurrencias_fallidas.csv'
-    df_fallidos.to_csv(nombre_fallidos, index=False)
+from conf import *
+from defs import *
+from defs_img import *
 
-    # Guardar el DataFrame de registros completados en un archivo CSV
-    nombre_completados = 'ocurrencias_completados.csv'
-    df_completados.to_csv(nombre_completados, index=False)
+"""
+    This file is responsible for downloading all images from a dataset into the same folder.
+    It automatically discards images that are not useful using an AI model.
+    Additionally, it rescales and converts them to .webp format to save space.
+"""
+
+def save_files():    
+    # Save the DataFrame of failed records to a CSV file
+    failed_filename = 'failed_occurrences.csv'
+    df_failed.to_csv(failed_filename, index=False)
+
+    # Save the DataFrame of completed records to a CSV file
+    completed_filename = 'completed_occurrences.csv'
+    df_completed.to_csv(completed_filename, index=False)
 
 if __name__ == '__main__':
-    # Comprobamos que estamos como superusuario
+    # Check if running as superuser
     if os.geteuid() != 0:
-        print("El programa necesita ser ejecutado como superusuario\nsudo su")
+        print("The program needs to be run as superuser\nsudo su")
         exit(-1)
         
-    # Definir la ruta base para guardar las imágenes descargadas
-    RUTA_IMAGENES = 'imagenes'
-    # Configurar Pandas para mostrar la totalidad de las columnas de texto
+    # Define the base path to save the downloaded images
+    IMAGE_PATH = 'images'
+    # Configure Pandas to display the full width of text columns
     pd.set_option('display.max_colwidth', None)
-    # Ruta del archivo CSV que contiene las ocurrencias
-    ruta_del_archivo_occurrences = 'ocurrencias_parseado.csv'
+    # Path to the CSV file containing the occurrences
+    occurrences_file_path = 'parsed_occurrences.csv'
 
-    # Tamaño de cada "chunk" al leer el archivo CSV: 1 millón de filas por vez
+    # Chunk size when reading the CSV file: 1 million rows at a time
     chunksize = 1 * 10 ** 6 
 
-    print("Leyendo el fichero de ocurrencias")
-    # Leer el archivo CSV en fragmentos para manejar grandes volúmenes de datos
-    df_occurrences = pd.read_csv(ruta_del_archivo_occurrences, delimiter=',', low_memory=False, on_bad_lines='skip')
+    print("Reading the occurrences file")
+    # Read the CSV file in chunks to handle large data volumes
+    df_occurrences = pd.read_csv(occurrences_file_path, delimiter=',', low_memory=False, on_bad_lines='skip')
 
-    # Calcular el tamaño total del archivo para estimar el número de chunks
-    espacio = os.path.getsize(ruta_del_archivo_occurrences)
-    # Calcular el número total de chunks basado en el tamaño del archivo y el tamaño de chunk
-    total_chunks = math.ceil((espacio/166)/chunksize)
+    # Calculate the total size of the file to estimate the number of chunks
+    file_size = os.path.getsize(occurrences_file_path)
+    # Calculate the total number of chunks based on file size and chunk size
+    total_chunks = math.ceil((file_size / 166) / chunksize)
 
-    print("Iniciando chunks\n")
+    print("Starting chunks\n")
 
-    # Procesar solo el primer chunk para inicializar el DataFrame de registros fallidos
-    df_fallidos = pd.DataFrame(df_occurrences.columns)
-    df_completados = pd.DataFrame(df_occurrences.columns)
+    # Process only the first chunk to initialize the DataFrame of failed records
+    df_failed = pd.DataFrame(df_occurrences.columns)
+    df_completed = pd.DataFrame(df_occurrences.columns)
 
     print(df_occurrences.head())
-    taxones = df_occurrences[df_occurrences['class'] == 'Bivalvia']
+    taxa = df_occurrences[df_occurrences['class'] == 'Bivalvia']
 
     try:
-        # Inicializar la barra de progreso para el procesamiento total de elementos
-        with tqdm(total=total_chunks, desc="Procesando elementos", unit="elemento") as pbar_total:
-            es_primer_chunk = True  # Indicador para saber si estamos procesando el primer chunk
-            nombre_archivo = 'ocurrencias.csv'
+        # Initialize the progress bar for total element processing
+        with tqdm(total=total_chunks, desc="Processing elements", unit="element") as pbar_total:
+            is_first_chunk = True  # Indicator to know if we are processing the first chunk
+            filename = 'occurrences.csv'
 
-            # Iterar sobre cada fila del DataFrame actual
-            for indice, fila in tqdm(df_occurrences.iterrows(), desc="Procesando elementos", unit="elementos"):
+            # Iterate over each row of the current DataFrame
+            for index, row in tqdm(df_occurrences.iterrows(), desc="Processing elements", unit="elements"):
 
-                # Comprobar si la fila tiene un identificador válido
-                if pd.notna(fila['identifier']):
+                # Check if the row has a valid identifier
+                if pd.notna(row['identifier']):
 
-                    # Construir la ruta de la carpeta basada en la clasificación taxonómica
-                    ruta_carpeta = f"{RUTA_IMAGENES}/{parsear_nombre(fila['class'])}/{parsear_nombre(fila['order'])}/{parsear_nombre(fila['family'])}/{parsear_nombre(fila['genus'])}/{parsear_nombre(fila['acceptedScientificName'])}"
+                    # Build the folder path based on taxonomic classification
+                    folder_path = f"{IMAGE_PATH}/{parse_name(row['class'])}/{parse_name(row['order'])}/{parse_name(row['family'])}/{parse_name(row['genus'])}/{parse_name(row['acceptedScientificName'])}"
 
-                    # Crear la carpeta si no existe
-                    if not os.path.exists(ruta_carpeta):
-                        os.makedirs(ruta_carpeta)
+                    # Create the folder if it doesn't exist
+                    if not os.path.exists(folder_path):
+                        os.makedirs(folder_path)
 
-                    # Construir la ruta completa del archivo de imagen a guardar
-                    ruta_completa = os.path.join(ruta_carpeta, parsear_nombre(str(fila['gbifID'])) + ".jpg")
-                    ruta_webp = ruta_completa.replace(".jpg",".webp")
+                    # Build the full path of the image file to save
+                    full_path = os.path.join(folder_path, parse_name(str(row['gbifID'])) + ".jpg")
+                    webp_path = full_path.replace(".jpg", ".webp")
 
-
-                    
-                    # Descargar y guardar la imagen si aún no existe
-                    if (not os.path.exists(ruta_completa) or es_imagen_corrupta(ruta_completa) and not os.path.exists(ruta_webp)):
+                    # Download and save the image if it doesn't exist yet
+                    if (not os.path.exists(full_path) or is_corrupt_image(full_path) and not os.path.exists(webp_path)):
                         try:
-                            os.remove(ruta_completa)
-                            respuesta = requests.get(fila['identifier'],timeout=5)
-                            if respuesta.status_code == 200:
-                                with open(ruta_completa, 'wb') as archivo:
-                                    archivo.write(respuesta.content)
-                                    convert_to_webp(ruta_completa)
-                                # Guardamos los que si que se han completado con exito.
-                                df_completados = pd.concat([df_completados, pd.DataFrame([fila])], ignore_index=True)
+                            os.remove(full_path)
+                            response = requests.get(row['identifier'], timeout=5)
+                            if response.status_code == 200:
+                                with open(full_path, 'wb') as file:
+                                    file.write(response.content)
+                                    convert_to_webp(full_path)
+                                # Save successfully completed records
+                                df_completed = pd.concat([df_completed, pd.DataFrame([row])], ignore_index=True)
                         
                         except KeyboardInterrupt:
-                            guardar_ficheros()
-                            print("El programa ha finalizado con falllos con éxito")
+                            save_files()
+                            print("The program successfully terminated with errors")
                             exit(-1)
 
                         except RequestException as e:
-                            print("Fallo en la URL : " + fila['identifier'])
+                            print("URL error: " + row['identifier'])
                             print(e)
-                            # Agregar la fila al DataFrame de registros fallidos si ocurre un error
-                            df_fallidos = pd.concat([df_fallidos, pd.DataFrame([fila])], ignore_index=True)
+                            # Add the row to the DataFrame of failed records if an error occurs
+                            df_failed = pd.concat([df_failed, pd.DataFrame([row])], ignore_index=True)
                             
                         except Exception as e: 
-                            
-                            # Agregar la fila al DataFrame de registros fallidos si ocurre un error
-                            df_fallidos = pd.concat([df_fallidos, pd.DataFrame([fila])], ignore_index=True)
+                            # Add the row to the DataFrame of failed records if an error occurs
+                            df_failed = pd.concat([df_failed, pd.DataFrame([row])], ignore_index=True)
 
-            # Actualizar la barra de progreso después de procesar cada chunk
+            # Update the progress bar after processing each chunk
             pbar_total.update(1)
 
-        guardar_ficheros()
-        print("El programa ha finalizado con éxito")
-        # apagar_equipo()
+        save_files()
+        print("The program successfully completed")
+        # shutdown_system()
 
     except Exception as e:
-        guardar_ficheros()
-        print("El programa ha finalizado con falllos con éxito")
-        print(f"Excepcion {e}")
-        # apagar_equipo()
+        save_files()
+        print("The program successfully terminated with errors")
+        print(f"Exception {e}")
+        # shutdown_system()

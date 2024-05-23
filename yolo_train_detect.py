@@ -1,38 +1,36 @@
 from ultralytics import YOLO
-from funciones import copiar_a_training_deteccion
-from globales import IMGSZ,RUTA_IMG_DETECCION
+from defs import copy_to_training_detection
+from conf import IMAGE_SIZE, DETECTION_IMAGE_PATH
 import os
 
-def procesar_datos_txt(directorio):
+def process_txt_data(directory):
     """
-    Procesa los datos de detección de la carpeta para que solamente exista una clase.
+    Processes the detection data in the folder so that only one class exists.
 
     Args:
-    directorio (str): La ruta al directorio donde buscar los archivos .txt.
-
+    directory (str): The path to the directory where the .txt files are located.
     """
-    # Recorrer los archivos en el directorio especificado
-    for archivo in os.listdir(directorio):
-        # Comprobar si el archivo termina con .txt
-        if archivo.endswith('.txt'):
-            # Agregar la ruta completa del archivo a la lista
-            path = os.path.join(directorio, archivo)
-            with open(path,'r') as file_read:
-                lineas = file_read.readlines()
-                nuevas_lineas = []
-                for linea in lineas:
-                    if str(linea).split(' ',maxsplit=1)[0] != '0':
-                        print(f"la linea {linea} contiene un uno, el archivo es: {path}")
-                    nueva_linea = '0 ' + str(linea).split(' ',maxsplit=1)[1]
-                    nuevas_lineas.append(nueva_linea)
+    # Iterate through the files in the specified directory
+    for file in os.listdir(directory):
+        # Check if the file ends with .txt
+        if file.endswith('.txt'):
+            # Add the full path of the file to the list
+            path = os.path.join(directory, file)
+            with open(path, 'r') as file_read:
+                lines = file_read.readlines()
+                new_lines = []
+                for line in lines:
+                    if str(line).split(' ', maxsplit=1)[0] != '0':
+                        print(f"The line {line} contains a one, the file is: {path}")
+                    new_line = '0 ' + str(line).split(' ', maxsplit=1)[1]
+                    new_lines.append(new_line)
             
             file_read.close()
-            with open(path,'w') as file_write:
-                file_write.writelines(nuevas_lineas)
+            with open(path, 'w') as file_write:
+                file_write.writelines(new_lines)
                 file_write.close()
-                
 
-copiar_a_training_deteccion(RUTA_IMG_DETECCION) # Copiamos los datos a la ruta de entrenamiento
-procesar_datos_txt(RUTA_IMG_DETECCION) # Procesamos los datos para que solo exista una clase, en caso de que el usuario se haya confundico
-model = YOLO('yolov8n.pt') # Obtenemos el modelo para la clasificicación
-results = model.train(data='conf_detect.yaml', epochs=30, imgsz=IMGSZ) # Lo entrenamos con 30 epocas y el archivo de configuracion de conf_detect.yaml
+copy_to_training_detection(DETECTION_IMAGE_PATH)  # Copy the data to the training path
+process_txt_data(DETECTION_IMAGE_PATH)  # Process the data so that only one class exists, in case the user made a mistake
+model = YOLO('yolov8n.pt')  # Get the model for classification
+results = model.train(data='conf_detect.yaml', epochs=30, imgsz=IMAGE_SIZE)  # Train it with 30 epochs and the conf_detect.yaml configuration file

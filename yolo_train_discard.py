@@ -1,9 +1,10 @@
 from ultralytics import YOLO
-from globales import RUTA_DESTINO_TRAINING,NOMBRE_ARCHIVO_BUENAS,NOMBRE_ARCHIVO_MALAS,IMGSZ
-from funciones import vaciar_carpeta, copiar_a_training_file
-vaciar_carpeta(RUTA_DESTINO_TRAINING)
-copiar_a_training_file('buenas',NOMBRE_ARCHIVO_BUENAS)
-copiar_a_training_file('malas',NOMBRE_ARCHIVO_MALAS)
+from conf import TRAINING_DEST_PATH, GOOD_IMAGE_FILE, BAD_IMAGE_FILE, IMAGE_SIZE
+from defs import empty_folder, copy_to_training_file
+
+empty_folder(TRAINING_DEST_PATH)
+copy_to_training_file('good', GOOD_IMAGE_FILE)
+copy_to_training_file('bad', BAD_IMAGE_FILE)
 
 model = YOLO('yolov8n-cls.pt')
-results = model.train(epochs=3, imgsz=IMGSZ)
+results = model.train(epochs=3, imgsz=IMAGE_SIZE)

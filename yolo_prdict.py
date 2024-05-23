@@ -1,8 +1,8 @@
 
 import os, sys
 from ultralytics import YOLO
-from globales import *
-from funciones import recortar_imagenes
+from conf import *
+from defs import recortar_imagenes
 
 class Animal:
     

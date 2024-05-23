@@ -1,94 +1,91 @@
-from globales import *
+from conf import *
 from ultralytics import YOLO
 from tqdm import tqdm
 import os
 import pandas as pd
 import requests
 from requests.exceptions import RequestException
-from random import  randint
+from random import randint
 from functools import reduce
-from funciones import *
+from defs import *
+from defs_img import *
 
-
-def descargar_imagenes_aleatorio(n_imagenes_descargar = 1000, todas = False):  
+def download_random_images(n_images_to_download=1000, download_all=False):  
     """
-    Esta funcion lo que hace es descargar un numero predeterminado de imagenes de un archivo de pandas de forma aleatoria
+    This function downloads a predetermined number of images from a pandas file randomly.
+    
     Args:
-    n_imagenes_descargar = Es el numero de imagenes que se van a descargar
-    todas = boleano que indica si se tienen que descargar todas las imágenes o no, esto quiere decir que si se tienen que descartar las imágenes malas o no""" 
+    n_images_to_download: The number of images to be downloaded.
+    download_all: Boolean indicating whether all images should be downloaded or not, 
+    i.e., whether to discard bad images or not.
+    """ 
     
     chunksize = 10**4
-    df_occurrences = pd.read_csv(CSV_DATOS, chunksize=chunksize, delimiter=',', low_memory=False, on_bad_lines='skip')
+    df_occurrences = pd.read_csv(PROCESSED_DATA_CSV, chunksize=chunksize, delimiter=',', low_memory=False, on_bad_lines='skip')
     
-    if(DESORDENAR_DATAFRAME):
+    if SHUFFLE_DATAFRAME:
         df_occurrences = shuffle_DataFrame(df_occurrences)
-    n_imagenes = 0
+    n_images = 0
     
-    CARPETA_IMAGENES_ENTRENAR_DETECCION = 'imagenes_deteccion'
+    DETECTION_TRAINING_IMAGE_FOLDER = 'detection_images'
     
-    vaciar_carpeta(RUTA_IMG_DETECCION)
+    empty_folder(DETECTION_IMAGE_PATH)
     
     for chunk in df_occurrences:
-        if (n_imagenes == n_imagenes_descargar):
+        if n_images == n_images_to_download:
             break
         else:
-            for indice_fila, fila in tqdm(pd.DataFrame(chunk).iterrows(), desc="Procesando elementos", unit="elementos"):
-                if (n_imagenes < n_imagenes_descargar):
-                    # Comprobar si la fila tiene un identificador válido
-                    if pd.notna(fila['identifier']):
+            for row_index, row in tqdm(pd.DataFrame(chunk).iterrows(), desc="Processing elements", unit="elements"):
+                if n_images < n_images_to_download:
+                    # Check if the row has a valid identifier
+                    if pd.notna(row['identifier']):
+                        # Build the folder path based on taxonomic classification
+                        folder_path = DETECTION_IMAGE_PATH
 
-                        # Construir la ruta de la carpeta basada en la clasificación taxonómica
-                        ruta_carpeta = RUTA_IMG_DETECCION
+                        # Create the folder if it doesn't exist
+                        if not os.path.exists(folder_path):
+                            os.makedirs(folder_path)
 
-                        # Crear la carpeta si no existe
-                        if not os.path.exists(ruta_carpeta):
-                            os.makedirs(ruta_carpeta)
-
-                        # Construir la ruta completa del archivo de imagen a guardar
-                        ruta_completa = os.path.join(ruta_carpeta, parsear_nombre(str(fila['gbifID'])) + ".jpg")
-                        ruta_webp = ruta_completa.replace(".jpg",".webp")
+                        # Build the full path of the image file to save
+                        full_path = os.path.join(folder_path, parse_name(str(row['gbifID'])) + ".jpg")
+                        webp_path = full_path.replace(".jpg", ".webp")
                         
-                        # Descargar y guardar la imagen si aún no existe
-                        if ((not os.path.exists(ruta_completa) or es_imagen_corrupta(ruta_completa)) and not os.path.exists(ruta_webp)):
+                        # Download and save the image if it doesn't exist yet
+                        if (not os.path.exists(full_path) or is_corrupt_image(full_path)) and not os.path.exists(webp_path):
                             try:
-                                    respuesta = requests.get(fila['identifier'],timeout=5)
-                                    if respuesta.status_code == 200:
-                                        with open(ruta_completa, 'wb') as archivo:
-                                            archivo.write(respuesta.content)
-                                            archivo.close()
+                                response = requests.get(row['identifier'], timeout=5)
+                                if response.status_code == 200:
+                                    with open(full_path, 'wb') as file:
+                                        file.write(response.content)
+                                        file.close()
                                                     
-                                            if not todas:
-                                                if (descartar_imagen_mala(ruta_completa)):
-                                                    if model_detect != None:
-                                                        recortar_imagenes(ruta_completa,delete_original=False)
-                                                    ruta_anterior = convert_to_webp(ruta_completa,only_rescal=True)
-                                                    n_imagenes += 1
-                                            else:
-                                                ruta_anterior = convert_to_webp(ruta_completa,only_rescal=True)
-                                                n_imagenes += 1
+                                        if not download_all:
+                                            if discard_bad_image(full_path):
+                                                if model_detect is not None:
+                                                    crop_images(full_path, delete_original=False)
+                                                previous_path = convert_to_webp(full_path, only_rescale=True)
+                                                n_images += 1
+                                        else:
+                                            previous_path = convert_to_webp(full_path, only_rescale=True)
+                                            n_images += 1
                                             
-                                            
-                                                
-                            
                             except KeyboardInterrupt:
-                                # guardar_ficheros()
-                                print("El programa ha finalizado con fallos con éxito")
+                                # save_files()
+                                print("The program successfully terminated with errors")
                                 exit(-1)
 
                             except RequestException as e:
-                                print("Fallo en la URL : " + fila['identifier'])
+                                print("URL error: " + row['identifier'])
                                 print(e)
-                                # Agregar la fila al DataFrame de registros fallidos si ocurre un error
-                                # df_fallidos = pd.concat([df_fallidos, pd.DataFrame([fila])], ignore_index=True)
+                                # Add the row to the DataFrame of failed records if an error occurs
+                                # df_failed = pd.concat([df_failed, pd.DataFrame([row])], ignore_index=True)
                                 
                             except Exception as e: 
                                 pass
-                                # Agregar la fila al DataFrame de registros fallidos si ocurre un error
-                                # df_fallidos = pd.concat([df_fallidos, pd.DataFrame([fila])], ignore_index=True)
+                                # Add the row to the DataFrame of failed records if an error occurs
+                                # df_failed = pd.concat([df_failed, pd.DataFrame([row])], ignore_index=True)
                 else:
                     break
                         
 if __name__ == "__main__":
-    descargar_imagenes_aleatorio(2000,True)
-    
-
+    download_random_images(2000, True)
