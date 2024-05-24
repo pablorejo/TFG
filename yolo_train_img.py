@@ -9,6 +9,7 @@ from requests.exceptions import RequestException
 from queue import Queue
 import threading
 from defs_img import *
+from playsound import playsound
 
 def process_row(row, training, initial_counts, queue):
     proceed = True
@@ -168,11 +169,14 @@ def filter_chunk(chunk: pd.DataFrame, initial_counts: dict, training: str):
     return filtered_chunk
 
 def train(
-    initial_model_name: str = "model",
-    model = YOLO('yolov8n-cls.pt'),
+    initial_model_name: str = "model_g",
+    model = model_init,
     column_filters: list = [],
     filters: list = [],
     taxon_index: int = 0):
+
+    start_time_func = time.time()
+    
 
     empty_folder(TEMP_IMAGE_PATH)  # Empty the temporary training image folder.
     training = taxonomic_ranks[taxon_index]
@@ -195,6 +199,7 @@ def train(
         dfs = shuffle_DataFrame(dfs)
     
     info('Start processing chunks')
+    start_time_proces_chunk = time.time()
     with tqdm(total=len(dfs)) as pbar:
         for chunk in dfs:
             filtered_chunk = filter_chunk(chunk,initial_counts,training)
@@ -202,15 +207,15 @@ def train(
             if no_more_images(initial_counts):
                 break
             pbar.update()
-                
     # Increase images if needed
     info('cheking data images and increasing')
     increase_images(initial_counts)
+    end_time_proces_chunk = time.time()
     
 
     model_name = f"{initial_model_name}_{column_filters[-1]}_{filters[-1]}" if column_filters else initial_model_name
-    model_folder = f'runs/classify/{model_name}'
-
+    model_folder = os.path.join(PATH_MODELS_TRAINED,model_name)
+    info(MODEL_INIT)
     if os.path.exists(model_folder):
         empty_folder(model_folder)
         os.rmdir(model_folder)
@@ -222,16 +227,34 @@ def train(
         Total images: {counts_with_transformations_and_crops}""")
     
     # Copy temporary images to training folder, if empty, do not train
+
     if copy_to_training(TEMP_IMAGE_PATH): 
         info("Training: " + model_name)
-        results = model.train(epochs=TRAIN_EPOCHS, imgsz=IMAGE_SIZE, name=model_name)
+        start_time_train = time.time()
+        results = model.train(epochs=TRAIN_EPOCHS, imgsz=IMAGE_SIZE, name=model_name,project=PATH_MODELS_TRAINED)
         
+        end_time_func = time.time()
+        execution_time_func = end_time_func - start_time_func
+        execution_time_train = end_time_func - start_time_train
+        execution_time_process_chunk = end_time_proces_chunk - start_time_proces_chunk
+        # Reproducir el sonido
+        playsound('extras/noti.mp3')
+        info(f"The function took {execution_time_func} seconds to execute.")
+
+        info(f"The train took {execution_time_train} seconds to execute.")
+        info(f"The proces of chunks took {execution_time_process_chunk} seconds to execute.")
+
+        time.sleep(3)
         # If we reach the species identification step, the taxonomic rank will be the last in the list. Save the filter list to a txt file for result analysis.
         if taxonomic_ranks[taxon_index] == taxonomic_ranks[-1]:
             with open(os.path.join(model_folder,'data.txt'), 'w') as file:
                 for filter_item in filters:
                     file.write(filter_item + ",")     
-                
+        
+        with open(os.path.join(model_folder,'information.txt'), 'w') as file:
+            file.write(f"The function took {execution_time_func} seconds to execute.\n")
+            file.write(f"The train took {execution_time_train} seconds to execute.\n")
+            file.write(f"The proces of chunks took {execution_time_process_chunk} seconds to execute.\n")
         model = YOLO(os.path.join(model_folder, 'weights', 'best.pt'), task='')
 
         second_loop = 0

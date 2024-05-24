@@ -5,7 +5,9 @@ from ultralytics import YOLO
 from yolo_procesar_pandas import process_pandas
 import psutil
 import time
+from playsound import playsound
 
+playsound('extras/noti.mp3')
 VERBOSE = True  # If you want text to appear during executions
 
 def warning(text: str):
@@ -30,6 +32,13 @@ def set_thread_priority():
     except Exception as e:
         fail(f"Failed to set thread priority: {e}")
     
+def chek_model(model: str):
+    if os.path.exists(model): 
+        return YOLO(model)
+    else:
+        warning(f"Discard model does not exist: {model}\nBad images will not be discarded")
+        return None
+    
 # Example of ANSI escape sequences for different colors
 class Colors:
     HEADER = '\033[95m'
@@ -46,23 +55,21 @@ TRAIN_LOCAL = False  # This means training will be done locally with the images 
 TEMP_IMAGE_PATH = "temp_images"  # This folder will temporarily store images before moving them to the training folder
 DETECTION_IMAGE_PATH = "detection_images"
 
-DISCARD_MODEL_PATH = 'yolo_models/yolo_discard.pt' 
-if os.path.exists(DISCARD_MODEL_PATH): 
-    model_discard = YOLO(DISCARD_MODEL_PATH)
-else:
-    model_discard = None
-    warning(f"Discard model does not exist: {DISCARD_MODEL_PATH}\nBad images will not be discarded")
-    
-    
-DETECT_MODEL_PATH = 'yolo_models/yolo_detect.pt'
-if os.path.exists(DETECT_MODEL_PATH): 
-    model_detect = YOLO(DETECT_MODEL_PATH)
-else:
-    model_detect = None
-    warning(f"Detection model does not exist: {DETECT_MODEL_PATH}\nImages will not be detected")
-    
-PANDAS_CSV_PATH = 'pandas_files'
+PATH_MODELS_TRAINED = 'runs/classify'
+MODELS_FOLDER_PATH = 'yolo_models'
+MODEL_INIT = os.path.join(MODELS_FOLDER_PATH,'yolov8n-cls.pt')  
+model_init = chek_model(MODEL_INIT)
 
+
+DISCARD_MODEL_PATH = os.path.join(MODELS_FOLDER_PATH,'yolo_discard.pt') 
+model_discard = chek_model(DISCARD_MODEL_PATH)
+    
+    
+DETECT_MODEL_PATH = os.path.join(MODELS_FOLDER_PATH,'yolo_detect.pt') 
+model_detect = chek_model(DETECT_MODEL_PATH)
+    
+
+PANDAS_CSV_PATH = 'pandas_files'
 # This file contains the URLs with the already processed images.
 PROCESSED_DATA_CSV = os.path.join(PANDAS_CSV_PATH,'parsed_occurrences_all.csv')
 
@@ -109,7 +116,7 @@ TRAINING_DEST_PATH = 'datasets/imagenet10'
 training_data_path = {
     'train': os.path.join(TRAINING_DEST_PATH,'train'),
     'test': os.path.join(TRAINING_DEST_PATH,'test'),
-    'valid': os.path.join(TRAINING_DEST_PATH,'valid'),
+    'valid': os.path.join(TRAINING_DEST_PATH,'val'),
 }
 
 TRAINING_DETECT_DEST_PATH = 'datasets/detect'
@@ -129,8 +136,8 @@ TAXONOMIC_RANKS = [
 ]
 
 # Training percentages for training, validation, and testing
-VALIDATION_PERCENTAGE = 0.1
-TESTING_PERCENTAGE = 0.02
+VALIDATION_PERCENTAGE = 0.2
+TESTING_PERCENTAGE = 0.2
 TRAINING_PERCENTAGE = 1 - TESTING_PERCENTAGE - VALIDATION_PERCENTAGE
 IMAGE_SAMPLE_COUNT = 3  # Maximum number of images per distinct class. Minimum should be 3.
 if IMAGE_SAMPLE_COUNT < 3:

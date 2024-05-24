@@ -4,7 +4,7 @@ def get_model_data(model_path: str):
     pass
 
 def get_models(models_path: str):
-    folders = get_folders_by_level('runs/classify', 1)
+    folders = get_folders_by_level(PATH_MODELS_TRAINED, 1)
     pass
 
 def process_data():

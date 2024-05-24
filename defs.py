@@ -156,17 +156,18 @@ def copy_to_training_lines(data_type, lines, txt_associated=False):
     """
     from conf import TESTING_PERCENTAGE, TRAINING_PERCENTAGE, VALIDATION_PERCENTAGE, training_data_path, warning, info, VERBOSE
     if len(lines) >= 3:
-        num_valid = math.ceil(len(lines) * VALIDATION_PERCENTAGE)
-        num_test = math.ceil(len(lines) * TESTING_PERCENTAGE)
+
+        num_train = math.floor(len(lines) * TRAINING_PERCENTAGE)
+        num_valid = math.floor(len(lines) * VALIDATION_PERCENTAGE)
         
-        for i in range(num_valid):
-            copy_file(lines[i], os.path.join(training_data_path["valid"], data_type), txt_associated)
-        
-        for i in range(num_valid, num_valid + num_test):
-            copy_file(lines[i], os.path.join(training_data_path["test"], data_type), txt_associated)
-            
-        for i in range(num_valid + num_test, len(lines)):
+        for i in range(num_train):
             copy_file(lines[i], os.path.join(training_data_path["train"], data_type), txt_associated)
+        
+        for i in range(num_train, num_train + num_valid):
+            copy_file(lines[i], os.path.join(training_data_path["valid"], data_type), txt_associated)
+            
+        for i in range(num_train + num_valid, len(lines)):
+            copy_file(lines[i], os.path.join(training_data_path["test"], data_type), txt_associated)
     else:
         warning(f"Not enough images\nImages:\n")
         if VERBOSE:
