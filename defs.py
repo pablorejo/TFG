@@ -130,44 +130,51 @@ def remove_images_without_txt(directory):
     
     info(f"Total removed images: {removed_images}")
 
-def copy_to_training(folder_path):
+def copy_to_training(folder_path,dest_path):
     """
     Copies the data from folder_path to the training folder.
-    
-    Returns: true if there are images in the training folders
+
+    Args:
+        folder_path (str): path that contains data
+        dest_path (str): where you whant to move data to test valid and train
+
+            Returns: true if there are images in the training folders
     """
-    from conf import TRAINING_DEST_PATH, warning, info, fail
-    empty_folder(TRAINING_DEST_PATH)  # Empty the training image folder
+    
+    from conf import warning, info, fail
+    empty_folder(dest_path)  # Empty the training image folder
     folders = get_folders_by_level(folder_path, 1)
     for folder in folders:
-        copy_to_training_lines(os.path.split(folder)[1], find_images(folder, extensions=['.webp', '.jpg']))
+        copy_to_training_lines(dest_path,os.path.split(folder)[1], find_images(folder, extensions=['.webp', '.jpg']))
     
-    if not os.listdir(TRAINING_DEST_PATH):
+    if not os.listdir(dest_path):
         info("Empty folder")
         
-    return os.listdir(TRAINING_DEST_PATH)
+    return os.listdir(dest_path)
 
-def copy_to_training_lines(data_type, lines, txt_associated=False):
+def copy_to_training_lines(dest_path,data_type, lines, txt_associated=False):
     """Copies images to the training folder.
     
     Args:
+    dest_path: path that go data tipes images 
     lines (list): Array with the paths of the files to be copied.
     data_type (str): The type of data, e.g., 'Bivalvia', 'Caudofaveata'.
+    txt_associated (bool): Boolean that indicate if you want to copy also a file with same name that ends in txt.
     """
-    from conf import TESTING_PERCENTAGE, TRAINING_PERCENTAGE, VALIDATION_PERCENTAGE, training_data_path, warning, info, VERBOSE
+    from conf import TESTING_PERCENTAGE, TRAINING_PERCENTAGE, VALIDATION_PERCENTAGE,training_data_path, warning, info, VERBOSE
     if len(lines) >= 3:
 
         num_train = math.floor(len(lines) * TRAINING_PERCENTAGE)
         num_valid = math.floor(len(lines) * VALIDATION_PERCENTAGE)
         
         for i in range(num_train):
-            copy_file(lines[i], os.path.join(training_data_path["train"], data_type), txt_associated)
+            copy_file(lines[i], os.path.join(dest_path,training_data_path["train"], data_type), txt_associated)
         
         for i in range(num_train, num_train + num_valid):
-            copy_file(lines[i], os.path.join(training_data_path["valid"], data_type), txt_associated)
+            copy_file(lines[i], os.path.join(dest_path,training_data_path["valid"], data_type), txt_associated)
             
         for i in range(num_train + num_valid, len(lines)):
-            copy_file(lines[i], os.path.join(training_data_path["test"], data_type), txt_associated)
+            copy_file(lines[i], os.path.join(dest_path,training_data_path["test"], data_type), txt_associated)
     else:
         warning(f"Not enough images\nImages:\n")
         if VERBOSE:
@@ -257,9 +264,9 @@ def get_GBIF(path: str):
     return os.path.split(path)[-1]
 
 def copy_file(source_path, dest_path, txt_associated: bool = False):
-    """Copies a file to a folder and creates the folder if it doesn't exist"""
+    """Copies a  file to a folderand creates the folder if it doesn't exist"""
     if not os.path.exists(dest_path):
-        os.makedirs(dest_path)
+        os.makedirs(dest_path,exist_ok=True)
     shutil.copy(source_path, os.path.join(dest_path, get_GBIF(source_path)))
     
     if txt_associated:
@@ -274,7 +281,7 @@ def shuffle_DataFrame(df: pd.DataFrame):
         
     return: Returns a new list of chunks with shuffled files.
     """
-    
+    from conf import PROCESSED_DATA_CSV, info, warning, fail
     # Define the output file name by adding 'shuffled_' to the original file name.
     
     # Initialize an empty list to store the shuffled chunks.

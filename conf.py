@@ -25,7 +25,11 @@ def set_thread_priority():
     p = psutil.Process(os.getpid())
     try:
         p.nice(PRIORITY)
-        info(f"Thread priority set to high")
+        if (PRIORITY > 0):
+            info(f"Thread priority set to LOW")
+        else:
+            info(f"Thread priority set to HIGHT")
+
     except psutil.AccessDenied as e:
         fail(f"You need to run as superuser to set priority correctly")
         time.sleep(2)
@@ -38,6 +42,11 @@ def chek_model(model: str):
     else:
         warning(f"Discard model does not exist: {model}\nBad images will not be discarded")
         return None
+
+def chek_folder(folder: str):
+    if not os.path.exists(folder):
+        os.mkdir(folder)
+    return folder
     
 # Example of ANSI escape sequences for different colors
 class Colors:
@@ -49,7 +58,10 @@ class Colors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
-    
+
+
+
+
 SHUFFLE_DATAFRAME = False  # Indicates if the dataframe should be shuffled, useful for getting random data from the dataframe
 TRAIN_LOCAL = False  # This means training will be done locally with the images already downloaded in the defined folder
 TEMP_IMAGE_PATH = "temp_images"  # This folder will temporarily store images before moving them to the training folder
@@ -62,16 +74,11 @@ model_init = chek_model(MODEL_INIT)
 
 
 DISCARD_MODEL_PATH = os.path.join(MODELS_FOLDER_PATH,'yolo_discard.pt') 
-model_discard = chek_model(DISCARD_MODEL_PATH)
-    
-    
 DETECT_MODEL_PATH = os.path.join(MODELS_FOLDER_PATH,'yolo_detect.pt') 
-model_detect = chek_model(DETECT_MODEL_PATH)
     
-
 PANDAS_CSV_PATH = 'pandas_files'
 # This file contains the URLs with the already processed images.
-PROCESSED_DATA_CSV = os.path.join(PANDAS_CSV_PATH,'parsed_occurrences_all.csv')
+PROCESSED_DATA_CSV = os.path.join(PANDAS_CSV_PATH,'parsed_occurrences.csv')
 
 # This file contains the URLs with all the images, processed and unprocessed.
 ALL_DATA_CSV = os.path.join(PANDAS_CSV_PATH,'parsed_occurrences_all.csv')  # All images regardless of quality
@@ -96,8 +103,8 @@ if not os.path.exists(PROCESSED_DATA_CSV):
 
 Image.MAX_IMAGE_PIXELS = None  # Allow unlimited image size
 
-IMAGE_SIZE = 640
-TRAIN_EPOCHS = 2
+IMAGE_SIZE = 128
+TRAIN_EPOCHS = 1
 
 # Path to the folder containing all images
 IMAGES_FOLDER = 'images'
@@ -107,16 +114,21 @@ DISCARD_TXT_PATH = "txt_files"
 GOOD_IMAGE_FILE = os.path.join(DISCARD_TXT_PATH,'good_images.txt')
 BAD_IMAGE_FILE = os.path.join(DISCARD_TXT_PATH,'bad_images.txt')
 types = {
-    'good': 'good',
-    'bad': 'bad'
+    'good': 'buenas',
+    'bad': 'malas'
 }
 
+IMAGE_DATA = os.path.join(DISCARD_TXT_PATH, 'multimedia.txt')
+OCCURRENCE_DATA = os.path.join(DISCARD_TXT_PATH, 'occurrence.txt')
+
+
 # Path where the training data will be stored
+DATA_CONFIGURATIONS_YAML = chek_folder('train_configurations')
 TRAINING_DEST_PATH = 'datasets/imagenet10'
 training_data_path = {
-    'train': os.path.join(TRAINING_DEST_PATH,'train'),
-    'test': os.path.join(TRAINING_DEST_PATH,'test'),
-    'valid': os.path.join(TRAINING_DEST_PATH,'val'),
+    'train': 'train',
+    'test': 'test',
+    'valid': 'val',
 }
 
 TRAINING_DETECT_DEST_PATH = 'datasets/detect'
@@ -144,7 +156,7 @@ if IMAGE_SAMPLE_COUNT < 3:
     fail(f"There must be at least 3 images per category")
     exit(-1)
 
-TRANSFORMATIONS_PER_IMAGE = 10  # Specifies how many transformations each image should undergo.
+TRANSFORMATIONS_PER_IMAGE = 2  # Specifies how many transformations each image should undergo.
 
 CONF_TOP_5 = 0.9
-PRIORITY = -5  # Sets the priority of processes in the system; requires running as sudo
+PRIORITY = -10  # Sets the priority of processes in the system; requires running as sudo negative num more priority

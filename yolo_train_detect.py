@@ -1,6 +1,6 @@
 from ultralytics import YOLO
 from defs import copy_to_training_detection
-from conf import IMAGE_SIZE, DETECTION_IMAGE_PATH
+from conf import IMAGE_SIZE, DETECTION_IMAGE_PATH,TRAIN_EPOCHS
 import os
 
 def process_txt_data(directory):
@@ -33,4 +33,4 @@ def process_txt_data(directory):
 copy_to_training_detection(DETECTION_IMAGE_PATH)  # Copy the data to the training path
 process_txt_data(DETECTION_IMAGE_PATH)  # Process the data so that only one class exists, in case the user made a mistake
 model = YOLO('yolov8n.pt')  # Get the model for classification
-results = model.train(data='conf_detect.yaml', epochs=30, imgsz=IMAGE_SIZE)  # Train it with 30 epochs and the conf_detect.yaml configuration file
+results = model.train(data='conf_detect.yaml', epochs=TRAIN_EPOCHS, imgsz=IMAGE_SIZE)  # Train it with 30 epochs and the conf_detect.yaml configuration file

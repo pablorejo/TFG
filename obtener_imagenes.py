@@ -73,7 +73,7 @@ if __name__ == '__main__':
 
                     # Create the folder if it doesn't exist
                     if not os.path.exists(folder_path):
-                        os.makedirs(folder_path)
+                        os.makedirs(folder_path,exist_ok=True)
 
                     # Build the full path of the image file to save
                     full_path = os.path.join(folder_path, parse_name(str(row['gbifID'])) + ".jpg")
@@ -88,6 +88,7 @@ if __name__ == '__main__':
                                 with open(full_path, 'wb') as file:
                                     file.write(response.content)
                                     convert_to_webp(full_path)
+                                    file.close()
                                 # Save successfully completed records
                                 df_completed = pd.concat([df_completed, pd.DataFrame([row])], ignore_index=True)
                         

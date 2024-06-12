@@ -115,7 +115,7 @@ def is_corrupt_image(image_path):
     except Exception:
         return False
 
-def discard_bad_image(img_path, ask=False, confidence=0.90):
+def discard_bad_image(img_path,model_to_discard, ask=False, confidence=0.90):
     """Discards images that are not useful for the project according to the model already trained by YOLO
     
     Args:
@@ -124,11 +124,11 @@ def discard_bad_image(img_path, ask=False, confidence=0.90):
     confidence: The confidence level you want the model to have between (0,1), default is 0.85
     
     Returns: True if the image is good, False if it is bad or not a file"""
-    from conf import model_discard, types, info, warning, fail
+    from conf import types, info, warning, fail, VERBOSE
     try:
         # Make a prediction on the image
-        results = model_discard.predict(img_path)
-
+        results = model_to_discard.predict(img_path,verbose=VERBOSE)
+        
         # Assuming `results` is a list of `Results` objects
         for result in results:
             # Access bounding boxes, confidences, and classes
@@ -144,18 +144,18 @@ def discard_bad_image(img_path, ask=False, confidence=0.90):
                 if os.path.isfile(img_path) or os.path.islink(img_path):
                     
                     if top1_confidence < confidence and ask:
-                        image = Image.open(img_path)
-                        # Show the image
-                        image.show()
-                        print(f"Most probable class: {result.names[top1_class_index]} with confidence {top1_confidence}\n")
-                        response = input('Do you want to delete the image? (y/n)\n')
-                        if response == 'y':
-                            os.remove(img_path)
-                            info("You indicated the image is bad")
-                            return False  # The image is bad
-                        else: 
-                            info("You indicated the image is good")
-                            return True  # The image is good
+                        with Image.open(img_path) as image:
+                            # Show the image
+                            image.show()
+                            print(f"Most probable class: {result.names[top1_class_index]} with confidence {top1_confidence}\n")
+                            response = input('Do you want to delete the image? (y/n)\n')
+                            if response == 'y':
+                                os.remove(img_path)
+                                info("You indicated the image is bad")
+                                return False  # The image is bad
+                            else: 
+                                info("You indicated the image is good")
+                                return True  # The image is good
                     else: 
                         os.remove(img_path)
                         warning("The image is bad")
@@ -167,12 +167,13 @@ def discard_bad_image(img_path, ask=False, confidence=0.90):
                 info("The image is good")
                 return True  # The image is good
     except NameError as e:
-        warning(e)
+        warning(f"The discard model does not exist, so return true: {e}")
         return True  # The discard model does not exist, so return true
     except Exception as e:
-        warning(e)
+        warning(f"{e}")
+        return True
 
-def crop_images(src_img: str, model: YOLO = None, delete_original: bool = True):
+def crop_images(src_img: str, model_to_crop: YOLO , model_to_discard: YOLO, delete_original: bool = True):
     """
     This function crops images based on an AI model.
     
@@ -182,16 +183,13 @@ def crop_images(src_img: str, model: YOLO = None, delete_original: bool = True):
     
     Returns: An array with the paths of the cropped images.
     """
-    from conf import model_detect, info, warning, fail
+    from conf import DETECT_MODEL_PATH,chek_model, info, warning, fail,VERBOSE
     image = cv2.imread(src_img)
     if image is None:
         info(f"Error reading image: {src_img}")
         return []
 
-    if model is not None:
-        results = model(image)
-    else:
-        results = model_detect(image)
+    results = model_to_crop(image,verbose=VERBOSE)
 
     base_name, _ = os.path.splitext(src_img)
     number = 0
@@ -212,7 +210,7 @@ def crop_images(src_img: str, model: YOLO = None, delete_original: bool = True):
             cropped_img_path = f'{base_name}_cropped_{number}.jpg'
             cv2.imwrite(cropped_img_path, cropped_img)
             
-            if discard_bad_image(cropped_img_path):
+            if discard_bad_image(cropped_img_path,model_to_discard):
                 number += 1
                 paths.append(cropped_img_path)
                 info(f'Cropped image saved at: {cropped_img_path}')
@@ -223,15 +221,18 @@ def crop_images(src_img: str, model: YOLO = None, delete_original: bool = True):
         paths.append(src_img)
     return paths
 
-def download_image(url, full_path, max_retries=3, timeout=20):
+def download_image(url, full_path, max_retries=3, timeout=5):
+    from conf import warning, info
     for attempt in range(max_retries):
         try:
             response = requests.get(url, timeout=timeout)
             if response.status_code == 200:
                 with open(full_path, 'wb') as file:
                     file.write(response.content)
+                    file.close()
+                    info(f"Image {full_path} correctly download")
                 return True
         except (RequestException, Timeout) as e:
             warning(f"URL error: {url} (attempt {attempt+1}/{max_retries}) - {str(e)}")
-            time.sleep(1 * attempt)  # Exponential backoff
+            time.sleep(1)  # Exponential backoff
     return False
