@@ -1,18 +1,21 @@
 from conf import *
 from os import path
 import pandas as pd
+from tqdm import tqdm
 
 def process_multimedia():
     info('Processing multimedia...')
     df_images = pd.read_csv(IMAGE_DATA, delimiter="\t", chunksize=10**4, low_memory=False, on_bad_lines='skip')
     chunks = []
     multimedia_columns = ['gbifID', 'identifier']
-    for chunk in df_images:
+    for chunk in tqdm(df_images):
         chunk_2 = chunk[multimedia_columns]
         chunks.append(chunk_2.dropna())
         
+    info('concat chunks')
     df_images_concatenated = pd.concat(chunks, ignore_index=True)
     
+    info('group by gbifID and applying list to identifier column')
     # Agrupar por 'gbifID' y crear listas de 'identifier'
     df_images_grouped = df_images_concatenated.groupby('gbifID')['identifier'].apply(list).reset_index()
     
@@ -33,10 +36,11 @@ def process_occurrences():
         'iucnRedListCategory'
     ]
     info('Processing occurrences...')
-    for chunk in df_occurrences:
+    for chunk in tqdm(df_occurrences):
         chunk_2 = chunk[occurrence_columns]
         chunks.append(chunk_2.dropna())
     
+    info('concat chunks')
     df_occurrences_concatenated = pd.concat(chunks, ignore_index=True)
     info(df_occurrences_concatenated.head())
     return df_occurrences_concatenated
