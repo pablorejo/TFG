@@ -30,7 +30,12 @@ def process_txt_data(directory):
                 file_write.writelines(new_lines)
                 file_write.close()
 
-copy_to_training_detection(DETECTION_IMAGE_PATH)  # Copy the data to the training path
-process_txt_data(DETECTION_IMAGE_PATH)  # Process the data so that only one class exists, in case the user made a mistake
-model = YOLO('yolov8n.pt')  # Get the model for classification
-results = model.train(data='conf_detect.yaml', epochs=TRAIN_EPOCHS, imgsz=IMAGE_SIZE)  # Train it with 30 epochs and the conf_detect.yaml configuration file
+
+def main():
+    copy_to_training_detection(DETECTION_IMAGE_PATH)  # Copy the data to the training path
+    process_txt_data(DETECTION_IMAGE_PATH)  # Process the data so that only one class exists, in case the user made a mistake
+    model = YOLO('yolov8n.pt')  # Get the model for classification
+    results = model.train(data='conf_detect.yaml', epochs=TRAIN_EPOCHS, imgsz=IMAGE_SIZE)  # Train it with 30 epochs and the conf_detect.yaml configuration file
+
+if __name__ == "__main__":
+    main()

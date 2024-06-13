@@ -7,7 +7,9 @@ import requests
 from requests.exceptions import RequestException, Timeout
 from ultralytics import YOLO
 from PIL import Image, UnidentifiedImageError
-import numpy as np
+from multiprocessing import cpu_count
+from pathlib import Path
+from torch.utils.data import Dataset
 
 def improve_contrast(image):
     lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
@@ -127,7 +129,7 @@ def discard_bad_image(img_path,model_to_discard, ask=False, confidence=0.90):
     from conf import types, info, warning, fail, VERBOSE
     try:
         # Make a prediction on the image
-        results = model_to_discard.predict(img_path,verbose=VERBOSE)
+        results = model_to_discard.predict(img_path,verbose=VERBOSE,device='cpu')
         
         # Assuming `results` is a list of `Results` objects
         for result in results:
@@ -189,7 +191,7 @@ def crop_images(src_img: str, model_to_crop: YOLO , model_to_discard: YOLO, dele
         info(f"Error reading image: {src_img}")
         return []
 
-    results = model_to_crop(image,verbose=VERBOSE)
+    results = model_to_crop(image,verbose=VERBOSE,device='cpu')
 
     base_name, _ = os.path.splitext(src_img)
     number = 0
@@ -222,7 +224,19 @@ def crop_images(src_img: str, model_to_crop: YOLO , model_to_discard: YOLO, dele
     return paths
 
 def download_image(url, full_path, max_retries=3, timeout=5):
-    from conf import warning, info
+    """download a image and save it
+    
+
+    Args:
+        url (str): url to img to download
+        full_path (str): path where you want to save the image
+        max_retries (int, optional): times that def will try to download. Defaults to 3.
+        timeout (int, optional): tiem that download will wait for download . Defaults to 5.
+
+    Returns:
+        bool: true if download correct false if not
+    """
+    from conf import warning, info, fail
     for attempt in range(max_retries):
         try:
             response = requests.get(url, timeout=timeout)
@@ -235,4 +249,42 @@ def download_image(url, full_path, max_retries=3, timeout=5):
         except (RequestException, Timeout) as e:
             warning(f"URL error: {url} (attempt {attempt+1}/{max_retries}) - {str(e)}")
             time.sleep(1)  # Exponential backoff
+    fail(f'Image with URL error: {url}, could not be download')
     return False
+
+def train_yolo_model(model: YOLO, model_name, train_folder_path, model_folder):
+    info(f"{model_name} {train_folder_path} {model_folder}")
+    """this def train a model based on configurations sets in conf.py and parameters recevied
+
+    Args:
+        model_name (str): name where you want to sabe model
+        train_folder_path (str): path where you have training images to train the model
+        model_folder (_type_): path where you want to save de results of train
+    """
+    num_cores = cpu_count()
+
+    if DEVICE == 'cpu':
+        os.environ['OMP_NUM_THREADS'] = str(num_cores)
+        torch.set_num_threads(num_cores)
+    else:
+        torch.cuda.set_device(0)
+        torch.cuda.empty_cache()
+        model = model.to('cuda')  # Asegúrate de mover el modelo a la GPU
+
+    num_workers = 8  # Puedes ajustar este número según tus necesidades
+
+    
+    try:
+        model.train(
+            data=train_folder_path,
+            epochs=TRAIN_EPOCHS,
+            imgsz=IMAGE_SIZE,
+            name=model_name,
+            project=model_folder,
+            device=DEVICE,
+            amp=True,
+            batch=8,
+            workers=num_workers
+        )
+    except RuntimeError as e:
+        print(f"Error during training: {e}")

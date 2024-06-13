@@ -1,5 +1,5 @@
+# if __name__ == "__main__":
 from conf import *
-from ultralytics import YOLO
 from tqdm import tqdm
 import os
 import pandas as pd
@@ -13,6 +13,7 @@ from playsound import playsound
 import ast
 import pickle
 from multiprocessing import Process, Lock,cpu_count, Manager
+from ultralytics import YOLO
 import torch
 
 STATE_FILE = 'yolo_train_img_data.pkl'
@@ -69,10 +70,7 @@ def process_row(
 
     if proceed:
         semaphore_values.acquire()
-        if row[training] not in initial_counts:
-            initial_counts[row[training]] = 0
-        
-        if (initial_counts[row[training]] + counts_with_crops[row[training]]) < IMAGE_SAMPLE_COUNT :  # If the taxon already has all the necessary images, do not download more.
+        if (counts_with_transformations_and_crops[row[training]]) < TOTAL_IMAGES_PER_CLASS  :  # If the taxon already has all the necessary images, do not download more.
             semaphore_values.release()
             
             # Check if the row has a valid identifier
@@ -136,26 +134,62 @@ def process_image(
         semaphore_models: threading.Semaphore
         ):
     
-
+    
     with semaphore_models:
         discard = discard_bad_image(full_path,model_to_discard)
 
     if discard:
+        number_of_transformations = TRANSFORMATIONS_PER_IMAGE
+        total_transformations = None
         with semaphore_values:
-            initial_counts[row[training]] += 1
 
+            not_processing = TOTAL_IMAGES_PER_CLASS - counts_with_transformations_and_crops[row[training]]
+            if not_processing <= 0:
+                os.remove(full_path)
+                return
+            
+            initial_counts[row[training]] += 1
             with semaphore_models:
                 paths = crop_images(src_img=full_path,model_to_crop=model_to_crop,model_to_discard=model_to_discard)
-                counts_with_crops[row[training]] += len(paths)
-                counts_with_transformations_and_crops[row[training]] += len(paths) + len(paths) * TRANSFORMATIONS_PER_IMAGE
+                number_of_crops = len(paths)
+                total = number_of_crops + number_of_crops * TRANSFORMATIONS_PER_IMAGE
+                
+                if not_processing - total < 0:
+                    if not_processing - number_of_crops < 0:
+                        for i in range(number_of_crops - not_processing):
+                            os.remove(paths[i])
+                        number_of_transformations = 0
+                        
+                        counts_with_crops[row[training]] += len(paths)
+                        counts_with_transformations_and_crops[row[training]] += len(paths)
+                    else:
+                        total_transformations = not_processing - number_of_crops
+                        
+                        counts_with_crops[row[training]] += len(paths)
+                        counts_with_transformations_and_crops[row[training]] += len(paths) + total_transformations
+                else:
+                    counts_with_crops[row[training]] += len(paths)
+                    counts_with_transformations_and_crops[row[training]] += len(paths) + len(paths) * TRANSFORMATIONS_PER_IMAGE
             
-        for path in paths:
-            new_path = convert_to_webp(path)
-            for k in range(TRANSFORMATIONS_PER_IMAGE):
-                augment_image(new_path, k)
         
+        new_paths = []
+        for path in paths:
+            new_paths.append(convert_to_webp(path))
+        
+        break_bool = False
+        transformations = 0
+        for k in range(number_of_transformations):
+            for new_path in new_paths:
+                augment_image(new_path, k)
+                transformations += 1
+                if total_transformations != None and transformations >= total_transformations:
+                    break_bool = True
+                    break
+            if break_bool:
+                break
     else:
-        os.remove(full_path)
+        pass
+        # os.remove(full_path)
 
             
 def process_chunk(
@@ -174,29 +208,44 @@ def process_chunk(
     semaphore_values = threading.Semaphore(1)
     semaphore_models = threading.Semaphore(1)
 
-    for _, row in pd.DataFrame(chunk).iterrows():
-        
-        thread = threading.Thread(target=process_row, 
-            args=(
-                row, 
-                training, 
-                initial_counts, 
-                temp_image_path, 
-                counts_with_crops, 
-                counts_with_transformations_and_crops, 
-                semaphore_values,
-                semaphore_models,
-                model_to_discard,
-                model_to_crop,
-            )
-        )
-
-        threads.append(thread)
-        thread.start()
     
-    for thread in threads:
-        thread.join()
-   
+    for _, row in pd.DataFrame(chunk).iterrows():
+        if USE_THREADS_TO_DOWNLOAD:
+            
+            thread = threading.Thread(target=process_row, 
+                args=(
+                    row, 
+                    training, 
+                    initial_counts, 
+                    temp_image_path, 
+                    counts_with_crops, 
+                    counts_with_transformations_and_crops, 
+                    semaphore_values,
+                    semaphore_models,
+                    model_to_discard,
+                    model_to_crop,
+                )
+            )
+            threads.append(thread)
+            thread.start()
+        else:
+        
+            process_row(row, 
+                    training, 
+                    initial_counts, 
+                    temp_image_path, 
+                    counts_with_crops, 
+                    counts_with_transformations_and_crops, 
+                    semaphore_values,
+                    semaphore_models,
+                    model_to_discard,
+                    model_to_crop)
+
+        
+    if USE_THREADS_TO_DOWNLOAD:
+        for thread in threads:
+            thread.join()
+  
     return 
 
 def calculate_data_of_df(data_path: str,filter_colums=None, filters=None):
@@ -276,9 +325,8 @@ def initial_df_processing(df_occurrences, training, column_filters, filters,taxo
     return initial_counts, total_counts, dfs
 
 def no_more_images(counts: dict):
-
     for _, value in counts.items():
-        if value < IMAGE_SAMPLE_COUNT:
+        if value < TOTAL_IMAGES_PER_CLASS:
             return False
     return True
 
@@ -297,36 +345,24 @@ def increase_images(initial_counts,counts_with_crops):
             else:
                 warning(f"No images found for class: {key}")
 
-def filter_chunk(chunk: pd.DataFrame, initial_counts: dict, counts_with_crops: dict, training: str):
-    initial_counts_copy = initial_counts.copy()
-    for key, value in counts_with_crops.items():
-        initial_counts_copy[key] += value
-
-    values_completed = [key for key, value in initial_counts_copy.items() if value >= IMAGE_SAMPLE_COUNT]
+def filter_chunk(chunk: pd.DataFrame,  counts_with_transformations_and_crops: dict, training: str):
+    
+    values_completed = [key for key, value in counts_with_transformations_and_crops.items() if value >= TOTAL_IMAGES_PER_CLASS]
     
     # Filtrar el chunk eliminando las filas donde 'training' esté en 'values_completed'
     filtered_chunk = chunk[~chunk[training].isin(values_completed)]
-    return filtered_chunk
+    return filtered_chunk,no_more_images(counts_with_transformations_and_crops)
 
-def train_model(
-    model, 
-    train_folder_path, 
-    model_name,
-    start_time_func,
-    execution_time_process_chunk,
-    model_folder
-):
+def train_model(model, train_folder_path, model_name, start_time_func, execution_time_process_chunk, model_folder):
     start_time_train = time.time()
-    num_cores = cpu_count()
-    os.environ['OMP_NUM_THREADS'] = str(num_cores)
-    torch.set_num_threads(num_cores)
-    model.train(data=train_folder_path, epochs=TRAIN_EPOCHS, imgsz=IMAGE_SIZE, name=model_name, project=model_folder, device='cpu')
+    
+    train_yolo_model(model=model,model_name=model_name, train_folder_path=train_folder_path,model_folder=model_folder)
+    
     end_time_func = time.time()
-
     execution_time_func = end_time_func - start_time_func
     execution_time_train = end_time_func - start_time_train
 
-    save_information(model_folder,execution_time_func,execution_time_train,execution_time_process_chunk)
+    save_information(model_folder, execution_time_func, execution_time_train, execution_time_process_chunk)
     return "Train Completed"
     
 def save_information(model_folder,execution_time_func,execution_time_train,execution_time_process_chunk):
@@ -408,8 +444,11 @@ def train(
             model_to_discart = YOLO(DISCARD_MODEL_PATH)
             model_to_crop = YOLO(DETECT_MODEL_PATH)
 
+            i = 0
             for chunk in dfs:
-                chunk_2 = filter_chunk(chunk,initial_counts,counts_with_crops,training)
+                chunk_2,end_of_images = filter_chunk(chunk,counts_with_transformations_and_crops,training)
+                if end_of_images:
+                    break
                 process_chunk(chunk_2, 
                     training, 
                     initial_counts, 
@@ -418,10 +457,12 @@ def train(
                     temp_image_path, 
                     model_to_discart, 
                     model_to_crop)
-
+                i+=1
+                
         # Increase images if needed
         info('cheking data images and increasing')
-        increase_images(initial_counts,counts_with_crops)
+        increase_images(initial_counts,counts_with_transformations_and_crops)
+        
     end_time_proces_chunk = time.time()
     
 
@@ -443,13 +484,19 @@ def train(
             Total images: {counts_with_transformations_and_crops}""")
     
     # Copy temporary images to training folder, if empty, do not train
-    if copy_to_training(temp_image_path,train_folder_path): 
+    if download_images_bool:
+        traing_bool = copy_to_training(temp_image_path,train_folder_path)
+    else:
+        traing_bool = True
+        
+    if traing_bool:
         info("Training: " + model_name)
         execution_time_process_chunk = end_time_proces_chunk - start_time_proces_chunk
 
         model = chek_model(path_model_to_train)
         if model == None:
             model = chek_model(MODEL_INIT)
+        # if __name__ == "__main__":
         train_model(model, 
             train_folder_path, 
             model_name,
@@ -579,5 +626,5 @@ if __name__ == "__main__":
             ]
         
         taxon_index = 0
-        calculate_data_of_df(PROCESSED_DATA_CSV,filter_colums=filter_colums,filters=filters)
+        # calculate_data_of_df(PROCESSED_DATA_CSV,filter_colums=filter_colums,filters=filters)
         train(column_filters=filter_colums,filters=filters,taxon_index=taxon_index,train_folder_path=TRAINING_DEST_PATH,download_images_bool=True)

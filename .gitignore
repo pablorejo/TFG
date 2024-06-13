@@ -19,3 +19,6 @@ yolov8n-cls.pt
 yolo_models.7z
 yolo_train_img_data.pkl
 train_configurations/model_g.yaml
+discard_images
+yolov8n.pt
+train_configurations

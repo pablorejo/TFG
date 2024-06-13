@@ -13,16 +13,8 @@ from defs_img import *
     Additionally, it rescales and converts them to .webp format to save space.
 """
 
-def save_files():    
-    # Save the DataFrame of failed records to a CSV file
-    failed_filename = 'failed_occurrences.csv'
-    df_failed.to_csv(failed_filename, index=False)
-
-    # Save the DataFrame of completed records to a CSV file
-    completed_filename = 'completed_occurrences.csv'
-    df_completed.to_csv(completed_filename, index=False)
-
-if __name__ == '__main__':
+def main():
+    
     # Check if running as superuser
     if os.geteuid() != 0:
         print("The program needs to be run as superuser\nsudo su")
@@ -36,7 +28,7 @@ if __name__ == '__main__':
     occurrences_file_path = 'parsed_occurrences.csv'
 
     # Chunk size when reading the CSV file: 1 million rows at a time
-    chunksize = 1 * 10 ** 6 
+    chunksize = 10 ** 4
 
     print("Reading the occurrences file")
     # Read the CSV file in chunks to handle large data volumes
@@ -54,13 +46,10 @@ if __name__ == '__main__':
     df_completed = pd.DataFrame(df_occurrences.columns)
 
     print(df_occurrences.head())
-    taxa = df_occurrences[df_occurrences['class'] == 'Bivalvia']
 
     try:
         # Initialize the progress bar for total element processing
         with tqdm(total=total_chunks, desc="Processing elements", unit="element") as pbar_total:
-            is_first_chunk = True  # Indicator to know if we are processing the first chunk
-            filename = 'occurrences.csv'
 
             # Iterate over each row of the current DataFrame
             for index, row in tqdm(df_occurrences.iterrows(), desc="Processing elements", unit="elements"):
@@ -93,7 +82,6 @@ if __name__ == '__main__':
                                 df_completed = pd.concat([df_completed, pd.DataFrame([row])], ignore_index=True)
                         
                         except KeyboardInterrupt:
-                            save_files()
                             print("The program successfully terminated with errors")
                             exit(-1)
 
@@ -110,12 +98,13 @@ if __name__ == '__main__':
             # Update the progress bar after processing each chunk
             pbar_total.update(1)
 
-        save_files()
         print("The program successfully completed")
         # shutdown_system()
 
     except Exception as e:
-        save_files()
         print("The program successfully terminated with errors")
         print(f"Exception {e}")
         # shutdown_system()
+
+if __name__ == '__main__':
+    main()

@@ -14,7 +14,7 @@ class ImageOrganizerApp:
 
         self.clear_files()
         
-        self.jpg_images = find_images("images", extensions=['.webp'])
+        self.jpg_images = find_images(DISCARD_IMAGE_PATH, extensions=['.webp','.jpg'])
         random.shuffle(self.jpg_images)
         self.image_number = 0
 

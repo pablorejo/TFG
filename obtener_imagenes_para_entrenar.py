@@ -3,12 +3,13 @@ from ultralytics import YOLO
 from tqdm import tqdm
 import os
 import pandas as pd
-import requests
 from requests.exceptions import RequestException
 from random import randint
 from functools import reduce
 from defs import *
 from defs_img import *
+import ast
+
 
 def download_random_images(n_images_to_download=1000, download_all=False):  
     """
@@ -27,9 +28,8 @@ def download_random_images(n_images_to_download=1000, download_all=False):
         df_occurrences = shuffle_DataFrame(df_occurrences)
     n_images = 0
     
-    DETECTION_TRAINING_IMAGE_FOLDER = 'detection_images'
-    
-    empty_folder(DETECTION_IMAGE_PATH)
+    empty_folder(DISCARD_IMAGE_PATH)
+    model_detect = chek_model(DETECT_MODEL_PATH)
     
     for chunk in df_occurrences:
         if n_images == n_images_to_download:
@@ -40,7 +40,7 @@ def download_random_images(n_images_to_download=1000, download_all=False):
                     # Check if the row has a valid identifier
                     if pd.notna(row['identifier']):
                         # Build the folder path based on taxonomic classification
-                        folder_path = DETECTION_IMAGE_PATH
+                        folder_path = DISCARD_IMAGE_PATH
 
                         # Create the folder if it doesn't exist
                         if not os.path.exists(folder_path):
@@ -53,12 +53,9 @@ def download_random_images(n_images_to_download=1000, download_all=False):
                         # Download and save the image if it doesn't exist yet
                         if (not os.path.exists(full_path) or is_corrupt_image(full_path)) and not os.path.exists(webp_path):
                             try:
-                                response = requests.get(row['identifier'], timeout=5)
-                                if response.status_code == 200:
-                                    with open(full_path, 'wb') as file:
-                                        file.write(response.content)
-                                        file.close()
-                                                    
+                                url_list = ast.literal_eval(row['identifier'])
+                                for url in url_list:
+                                    if download_image(url,full_path=full_path):   
                                         if not download_all:
                                             if discard_bad_image(full_path):
                                                 if model_detect is not None:

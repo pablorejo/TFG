@@ -72,7 +72,7 @@ def copy_to_training_file(data_type, file_path):
     with open(file_path) as file:
         lines = file.read().splitlines()
         random.shuffle(lines)  # This shuffles the list in-place
-        copy_to_training_lines(data_type, lines=lines)
+        copy_to_training_lines(dest_path=TRAINING_DEST_PATH,data_type=data_type, lines=lines)
 
 def copy_to_training_detection(folder_path):
     """
@@ -251,7 +251,6 @@ def empty_folder(folder_path):
     if os.path.exists(folder_path):
         for name in os.listdir(folder_path):
             complete_path = os.path.join(folder_path, name)
-            
             # Check if it is a file or a folder
             if os.path.isfile(complete_path) or os.path.islink(complete_path):
                 os.remove(complete_path)  # Delete files or symbolic links
