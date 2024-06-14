@@ -6,27 +6,13 @@ import pandas as pd
 from random import randint
 from defs import *
 from requests.exceptions import RequestException
-from queue import Queue
 import threading
 from defs_img import *
 from playsound import playsound
 import ast
-import pickle
-from multiprocessing import Process, Lock,cpu_count, Manager
+from multiprocessing import Manager, Lock
 from ultralytics import YOLO
-import torch
-
-STATE_FILE = 'yolo_train_img_data.pkl'
-
-def save_state(state):
-    with open(STATE_FILE, 'wb') as f:
-        pickle.dump(state, f)
-
-def load_state():
-    if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, 'rb') as f:
-            return pickle.load(f)
-    return None
+from save_context import *
 
 
 def create_conf_yaml(path_file,path_to_train,clases):
@@ -202,13 +188,9 @@ def process_chunk(
         model_to_discard: YOLO,
         model_to_crop: YOLO):
     
+    semaphore_values = threading.Semaphore()
+    semaphore_models = threading.Semaphore()
     threads = []
-
-    
-    semaphore_values = threading.Semaphore(1)
-    semaphore_models = threading.Semaphore(1)
-
-    
     for _, row in pd.DataFrame(chunk).iterrows():
         if USE_THREADS_TO_DOWNLOAD:
             
@@ -245,7 +227,6 @@ def process_chunk(
     if USE_THREADS_TO_DOWNLOAD:
         for thread in threads:
             thread.join()
-  
     return 
 
 def calculate_data_of_df(data_path: str,filter_colums=None, filters=None):
@@ -291,12 +272,8 @@ taxonomic_ranks = [
 ]
 
 def initial_df_processing(df_occurrences, training, column_filters, filters,taxon_index):
-
-    manager = Manager()
-
-    total_counts = manager.dict() # Contains a dictionary of the taxon name with the number of existing data points.
-    
-    initial_counts = manager.dict()  # Contains a dictionary of the taxon name and keeps track of how many there are of each.
+    total_counts = {} # Contains a dictionary of the taxon name with the number of existing data points.
+    initial_counts = {}  # Contains a dictionary of the taxon name and keeps track of how many there are of each.
     dfs = []
     
     for chunk in df_occurrences:
@@ -368,7 +345,7 @@ def train_model(model, train_folder_path, model_name, start_time_func, execution
 def save_information(model_folder,execution_time_func,execution_time_train,execution_time_process_chunk):
     end_time_func = time.time()
     # play notification sound
-    playsound('extras/noti.mp3')
+    noti()
     info(f"The function took {execution_time_func} seconds to execute.")
     info(f"The train took {execution_time_train} seconds to execute.")
     info(f"The proces of chunks took {execution_time_process_chunk} seconds to execute.")
@@ -380,35 +357,38 @@ def save_information(model_folder,execution_time_func,execution_time_train,execu
         file.close()
 
 def train(
-    model_folder: str = os.path.join(PATH_MODELS_TRAINED,"model_g"),
-    path_model_to_train = MODEL_INIT,
-    column_filters: list = [],
-    filters: list = [],
-    taxon_index: int = 0,
-    temp_image_path = TEMP_IMAGE_PATH,
-    train_folder_path = TRAINING_DEST_PATH,
-    resume = False,
-    download_images_bool = True,
+        model_folder: str = os.path.join(PATH_MODELS_TRAINED,"model_g"),
+        path_model_to_train = MODEL_INIT,
+        column_filters: list = [],
+        filters: list = [],
+        taxon_index: int = 0,
+        temp_image_path = TEMP_IMAGE_PATH,
+        train_folder_path = TRAINING_DEST_PATH,
+        resume = False,
+        download_images_bool = True,
+        save_context = None
     ):
 
     start_time_func = time.time()
 
     if resume:
-        state = load_state()
-        if state:
-            initial_model_name = state['initial_model_name']
-            column_filters = state['column_filters']
-            filters = state['filters']
-            taxon_index = state['taxon_index']
-            temp_image_path = state['temp_image_path']
-            train_folder_path = state['train_folder_path']
-            initial_counts = state['initial_counts']
-            total_counts = state['total_counts']
-            counts_with_crops = state['counts_with_crops']
-            counts_with_transformations_and_crops = state['counts_with_transformations_and_crops']
-        else:
-            raise ValueError("No saved state to resume from.")
-    
+        save_context = SaveContext(load_state())
+        
+        # if taxon_index is less than end_taxon recovery we have to load context taxon
+        if save_context.end_taxon == None or taxon_index < save_context.end_taxon:
+            taxon_index = max(save_context.context_taxon_dict.keys())
+            context_taxon = ContextTaxon(save_context.context_taxon_dict[taxon_index])
+            model_folder = context_taxon.model_folder
+            column_filters = context_taxon.column_filters
+            filters = context_taxon.filters
+            temp_image_path = context_taxon.temp_image_path
+            train_folder_path = context_taxon.train_folder_path
+            initial_counts = context_taxon.initial_counts
+            total_counts = context_taxon.total_counts
+            counts_with_crops = context_taxon.counts_with_crops
+            counts_with_transformations_and_crops = context_taxon.counts_with_transformations_and_crops
+            save_context.end_taxon = taxon_index            
+        
     if download_images_bool:
         empty_folder(temp_image_path)  # Empty the temporary training image folder.
     training = taxonomic_ranks[taxon_index]
@@ -424,11 +404,11 @@ def train(
         initial_counts, total_counts, dfs = initial_df_processing(df_occurrences, training, column_filters, filters,taxon_index)
         
         # Get previous chunk data and filter it
-
-        manager = Manager()
-        counts_with_crops = manager.dict(initial_counts.copy())
-        counts_with_transformations_and_crops = manager.dict(initial_counts.copy()) 
-
+        counts_with_crops = initial_counts.copy()
+        counts_with_transformations_and_crops = initial_counts.copy() 
+        initial_counts = initial_counts.copy()
+        total_counts = total_counts.copy()
+        
         # Shuffle dataframe if required
         if SHUFFLE_DATAFRAME and taxon_index == 0:
             info('Shuffling dataframe')
@@ -485,18 +465,19 @@ def train(
     
     # Copy temporary images to training folder, if empty, do not train
     if download_images_bool:
-        traing_bool = copy_to_training(temp_image_path,train_folder_path)
+        traing_yolo_bool = copy_to_training(temp_image_path,train_folder_path)
     else:
-        traing_bool = True
+        traing_yolo_bool = True
         
-    if traing_bool:
+    if traing_yolo_bool:
         info("Training: " + model_name)
         execution_time_process_chunk = end_time_proces_chunk - start_time_proces_chunk
 
         model = chek_model(path_model_to_train)
         if model == None:
             model = chek_model(MODEL_INIT)
-        # if __name__ == "__main__":
+        
+        # Train yolo bool    
         train_model(model, 
             train_folder_path, 
             model_name,
@@ -504,20 +485,7 @@ def train(
             execution_time_process_chunk,
             model_folder)
         
-        if download_images_bool:
-            state = {
-                    'model_folder': model_folder,
-                    'column_filters': column_filters,
-                    'filters': filters,
-                    'taxon_index': taxon_index,
-                    'temp_image_path': temp_image_path,
-                    'train_folder_path': train_folder_path,
-                    'initial_counts': initial_counts,
-                    'total_counts': total_counts,
-                    'counts_with_crops': counts_with_crops,
-                    'counts_with_transformations_and_crops': counts_with_transformations_and_crops
-                }
-            save_state(state)
+        
 
         # If we reach the species identification step, the taxonomic rank will be the last in the list. Save the filter list to a txt file for result analysis.
         if taxonomic_ranks[taxon_index] == taxonomic_ranks[-1]:
@@ -529,12 +497,7 @@ def train(
             
 
         path_to_model = os.path.join(model_folder,'weights','best.pt') 
-
         second_loop = 0
-
-        if download_images_bool:
-            empty_folder(temp_image_path)
-
         
         for key, _ in total_counts.items():
             if taxon_index == 0 and second_loop == 1:
@@ -556,6 +519,26 @@ def train(
                         traing_bool = False
                 
 
+                # Save context
+                if save_context == None:
+                    save_context = SaveContext()
+                    
+                context_taxon = ContextTaxon(
+                    model_folder,
+                    column_filters,
+                    filters,
+                    taxon_index,
+                    temp_image_path,
+                    train_folder_path,
+                    initial_counts,
+                    total_counts,
+                    counts_with_crops,
+                    counts_with_transformations_and_crops
+                )
+                save_context.add_context_taxon(context_taxon)
+                save_state(save_context)
+                
+                # Recursive training
                 if traing_bool:
                     next_model_folder = os.path.join(model_folder,f"{taxonomic_ranks[taxon_index]}_{key}")
                     train(
@@ -563,16 +546,19 @@ def train(
                         column_filters=next_column_filters,
                         filters=next_filters,
                         taxon_index=taxon_index+1,
-                        path_model_to_train=path_to_model)
+                        path_model_to_train=path_to_model,
+                        resume=resume)
 
             else:
                 info(f"Finished {column_filters} of {filters}")
             second_loop = 1
     else:
         text = f"No data exists for these filters\n {column_filters}\n{filters}"
+        chek_folder(model_folder)
         with open(os.path.join(model_folder,'info.txt'),'w') as file:
             file.write(text)
         info(text)
+
 
 def train_folder(model_name: str, folder_name: str):
     """Train data from a folder and its subfolders.
@@ -628,3 +614,4 @@ if __name__ == "__main__":
         taxon_index = 0
         # calculate_data_of_df(PROCESSED_DATA_CSV,filter_colums=filter_colums,filters=filters)
         train(column_filters=filter_colums,filters=filters,taxon_index=taxon_index,train_folder_path=TRAINING_DEST_PATH,download_images_bool=True)
+

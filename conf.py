@@ -7,9 +7,19 @@ import time
 from playsound import playsound
 import torch
 
-playsound('extras/noti.mp3')
-VERBOSE = True  # If you want text to appear during executions
 
+VERBOSE = True  # If you want text to appear during executions
+# Example of ANSI escape sequences for different colors
+class Colors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m WARNING: '
+    FAIL = '\033[91m ERROR: '
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    
 def warning(text: str):
     if VERBOSE:
         print(Colors.WARNING, text, Colors.ENDC)
@@ -20,6 +30,21 @@ def fail(text: str):
 def info(text: str):
     if VERBOSE:
         print(Colors.OKGREEN, text, Colors.ENDC)
+
+def noti():
+    # Asegurarse de que la ruta al archivo de sonido es correcta
+    sound_file = os.path.join(os.getcwd(), 'extras', 'noti.mp3')
+    
+    # Verificar si el archivo de sonido existe
+    if os.path.exists(sound_file):
+        try:
+            playsound(sound_file)
+            info('Notification sound')
+        except UnicodeDecodeError as e:
+            fail(f"Error playing sound: {e}")
+    else:
+        warning(f"Sound file not found: {sound_file}")
+noti()
 
 def set_thread_priority():
     p = psutil.Process(os.getpid())
@@ -48,19 +73,10 @@ def chek_folder(folder: str):
         os.makedirs(folder)
     return folder
     
-# Example of ANSI escape sequences for different colors
-class Colors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m WARNING: '
-    FAIL = '\033[91m ERROR: '
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
 
 
-SHUFFLE_DATAFRAME = True  # Indicates if the dataframe should be shuffled, useful for getting random data from the dataframe
+
+SHUFFLE_DATAFRAME = False  # Indicates if the dataframe should be shuffled, useful for getting random data from the dataframe
 TRAIN_LOCAL = False  # This means training will be done locally with the images already downloaded in the defined folder
 TEMP_IMAGE_PATH = chek_folder("temp_images")  # This folder will temporarily store images before moving them to the training folder
 DETECTION_IMAGE_PATH = chek_folder("detection_images")
@@ -112,6 +128,7 @@ TRAIN_EPOCHS = 30
 ## 0: single GPU
 # DEVICE = 0
 DEVICE = 'cuda' if torch.cuda.is_available() else "cpu"
+# DEVICE = "cpu"
 
 # Path to the folder containing all images
 IMAGES_FOLDER = chek_folder('images')
@@ -158,7 +175,7 @@ TAXONOMIC_RANKS = [
 VALIDATION_PERCENTAGE = 0.2
 TESTING_PERCENTAGE = 0.2
 TRAINING_PERCENTAGE = 1 - TESTING_PERCENTAGE - VALIDATION_PERCENTAGE
-IMAGE_SAMPLE_COUNT = 10  # Maximum number of images per distinct class. Minimum should be 3.
+IMAGE_SAMPLE_COUNT = 400  # Maximum number of images per distinct class. Minimum should be 3.
 if IMAGE_SAMPLE_COUNT < 3:
     fail(f"There must be at least 3 images per category")
     exit(-1)
