@@ -275,7 +275,7 @@ def train_yolo_model(model: YOLO, model_name, train_folder_path, model_folder):
 
     
     try:
-        model.train(
+        results = model.train(
             data=train_folder_path,
             epochs=TRAIN_EPOCHS,
             imgsz=IMAGE_SIZE,
@@ -286,5 +286,6 @@ def train_yolo_model(model: YOLO, model_name, train_folder_path, model_folder):
             batch=8,
             workers=num_workers
         )
+        return results
     except RuntimeError as e:
         print(f"Error during training: {e}")

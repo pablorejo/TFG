@@ -1,107 +1,141 @@
-
-import os, sys
-from ultralytics import YOLO
+import sys
 from conf import *
-from defs import recortar_imagenes
+class Taxon:
+    def __init__(self, name_taxon, taxon,conf):
+        """This is de constructor of Taxon class
 
+        Args:
+            name_taxon (str): the name of the taxon, for example: 'class', 'order'...
+            taxon (str): the value of the name taxon, for example: 'Gasteropoda'.
+            conf (float): the value of conf that predict model returns.
+        """
+        self.name_taxon = name_taxon
+        self.taxon = taxon
+        self.conf = conf
+            
 class Animal:
     
-    def __init__(self,rangos_taxonomicos: dict):
-        self.clase = rangos_taxonomicos['clase']
-        self.orden = rangos_taxonomicos['orden']
-        self.familia = rangos_taxonomicos['familia']
-        self.genero = rangos_taxonomicos['genero']
-        self.especie = rangos_taxonomicos['especie']
-        
-    def to_string(self):
-        cadena = f"clase: {self.clase}"
-        cadena = cadena + f"\norden: {self.orden}"
-        cadena = cadena + f"\nfamilia: {self.familia}"
-        cadena = cadena + f"\ngenero: {self.genero}"
-        cadena = cadena + f"\nespecie: {self.especie}"
-        return cadena
+    def __init__(self):
+        self.taxonomic_path_top1 = {}
+        self.taxonomic_path_top2 = {}
+        self.taxonomic_path_top3 = {}
+        self.taxonomic_path_top4 = {}
+        self.taxonomic_path_top5 = {}
+        self.taxonomic_paths = [
+            self.taxonomic_path_top1,
+            self.taxonomic_path_top2,
+            self.taxonomic_path_top3,
+            self.taxonomic_path_top4,
+            self.taxonomic_path_top5
+        ]
     
-    def poner_imagen(self, img_ruta):
-        self.img_ruta = img_ruta
+    def add_taxon(self, names_taxon_and_taxons_and_confs):
+        for i, (name_taxon, taxon, conf) in enumerate(names_taxon_and_taxons_and_confs[:5]):
+            self.taxonomic_paths[i][name_taxon] = Taxon(name_taxon, taxon, conf)
         
-    def set_rastro(self, rastro):
-        self.rastro = rastro
+    def get_conf(self):
+        conf = None
+        for _,taxon in self.taxonomic_path_top1.items():
+            if conf:
+                conf = conf * taxon.conf
+            else:
+                conf = taxon.conf
+        return conf, self.taxonomic_path_top1
+                    
+                
+            
 
+class Predict:
+    animals = {}
+    
+    
+        
+    def precision_predict(self,images):
+        """This function only gave one animal and use all images to try to predict with more precision
 
-def predecir_basico(imgPAHT: str, model: YOLO = YOLO('runs/classify/train2/weights/best.pt' )):
-        # Realiza la predicción en la imagen
-        results = model(imgPAHT)
+        Args:
+            imagenes (list(str)): list of path to images that will be predicted
+        """
+        animals = self.simple_predict(images)
+        
+        animals_dict = {}
+        last_taxon_name = TAXONOMIC_RANKS[-1]
+        for animal,image in animals:
+            conf, taxonomic_path = Animal(animal).get_conf()
+            last_taxon = taxonomic_path[last_taxon_name]
+            if last_taxon not in animals_dict:
+                animals_dict[last_taxon] = conf
+            else: 
+                animals_dict[last_taxon] += conf
+        
+        tops = []
+        for animal in animals:
+            animal = Animal(animal)
+            conf,taxon_path_top1 = animal.get_conf()
+            tops.append((conf,taxon_path_top1))
+            
+        # Ordenar la lista tops por conf en orden descendente
+        tops.sort(key=lambda x: x[0], reverse=False)
+        return tops
+            
+    
+    
+    def simple_predict(self,images):
+        """This function gave one animal per image giving a process to predict a lot of animals in only one funtion. Less precision. 
 
-        # Suponiendo que `results` es una lista de objetos `Results`
+        Args:
+            imagenes (list(str)): list of path to images that will be predicted
+        """
+        animals = []
+        for image in images:
+            animal = Animal(self.predict_image(image))
+            animals.append((animal,image))
+        return animals
+    
+    def preditc_taxon(self, image,model,name_taxon):
+        results = model.predict(image,verbose=VERBOSE,device='cpu')
+        
+        # Assuming `results` is a list of `Results` objects
         for result in results:
+            # Access bounding boxes, confidences, and classes
             probs = result.probs  # Probs object for classification outputs
-            # Obtiene el índice de la clase top 1 (la más probable)
-            top5_str = []
-            for top in probs.top5:
-                top5_str.append(result.names[top])
-            
-            return top5_str, probs.top1conf
-            
-def predecir_imagen(img_path: str):
-    """Esta funcion nos devuelve una clase imagen que contiene las caracteristicas de este animal
-    Args:
-        imgPath (str): ruta a la imagen a predecir
-    """
 
-    rangos_taxonomicos = [
-        'clase',
-        'orden',
-        'familia',
-        'genero',
-        'especie',
-    ]
-    
-    taxones = {}
-    top5_resultado_bool = False
-    top5_resultado = []
-    nombre_modelo = ""
-    rastro =  []
-    for taxon in rangos_taxonomicos:
-        str_modelo = f'runs/classify/modelo_entrenando_{nombre_modelo}/weights/best.pt'
-        model = YOLO(str_modelo)
-        top5,conf = predecir_basico(imgPAHT=img_path,model=model)
-        if conf < CONF_TOP_5 and not top5_resultado_bool:
-            top5_resultado_bool = True
-            top5_resultado = top5
+            top5_confs = probs.top5conf
+            top5_class_indexs = probs.top5
+            names = result.names
+            
+            return_results = []
+            for conf,index in zip(top5_confs,top5_class_indexs):
+                taxon = names[index]
+                return_results.append((name_taxon, taxon, conf))
+            
+            return return_results
         
-        rastro.append(conf)
-        nombre_modelo = "_" + top5[0]
-        taxones[taxon] = top5[0]
-    
-    animal = Animal(rangos_taxonomicos)
-    animal.set_rastro(rastro)
-    
-    info(animal.toString())
-    return animal
+    def predict_image(self,image):
+        animal = Animal()
+        
+        folder = os.path.join(PATH_MODELS_TRAINED,"model_g")
+        model_frist = YOLO(folder)
+        names_taxon_and_taxons_and_confs = self.preditc_taxon(image,model_frist,TAXONOMIC_RANKS[0])
+        animal.add_taxon(names_taxon_and_taxons_and_confs)
+        taxon = names_taxon_and_taxons_and_confs[0][0] # the taxon who has the most conf
+        
+        for index in range(1,len(TAXONOMIC_RANKS)):
+            taxon_name = TAXONOMIC_RANKS[index-1]
+            folder = os.path.join(folder,f"{taxon_name}_{taxon}")
+            model = YOLO(folder)
+            names_taxon_and_taxons_and_confs = self.preditc_taxon(image,model,TAXONOMIC_RANKS[index])
+            taxon = names_taxon_and_taxons_and_confs[0][0] # the taxon who has the most conf
+            animal.add_taxon(names_taxon_and_taxons_and_confs)
+                  
+        animal.images.append(image)
+        return animal
+            
 
-def predecir_imagenes(imagenes):
-    
-    
-    for imagen in imagenes:
-        animal = Animal(predecir_imagen(imagen))
-        animal.rastro
-    
-    pass
-
-def predecir(args:str):
-    
-    imagenes = args.split(',')
-    animales = []
-    if len(imagenes) == 1:
-        imagenes_cropped = recortar_imagenes(imagenes[0],delete_original=False)
-        for imagen in imagenes_cropped:
-            animal = Animal(predecir_imagen(imagen))
-            animal.poner_imagen(imagen)
-    elif len(imagenes) > 1:
-        predecir_imagenes(imagenes)
-    else:
-        fail("No se han proporcionado imagenes")
-        exit(0)
+    def predecir(self,args:str, precision_predict= False):
+        images = args.split(',')
+        if precision_predict:
+            self.precision_predict(images)
         
         
         
@@ -112,5 +146,6 @@ if __name__ == "__main__":
         exit(-1)
     
     else:
-        predecir('prueba.webp')
+        predict = Predict()
+        predict.predecir()
         # predecir(sys.argv[1])

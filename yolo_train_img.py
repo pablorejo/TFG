@@ -238,13 +238,13 @@ def calculate_data_of_df(data_path: str,filter_colums=None, filters=None):
     first_time = True
     total_lines = 0
 
-    for column_name in taxonomic_ranks:
+    for column_name in TAXONOMIC_RANKS:
         df = pd.read_csv(data_path, chunksize=chunksize, delimiter=',', low_memory=False, on_bad_lines='skip')
         unique_values = set()
         for chunk in df:
             for colum, filter_values in zip(filter_colums,filters):
-                index_of_filter = taxonomic_ranks.index(colum)
-                if index_of_filter <= taxonomic_ranks.index(column_name):
+                index_of_filter = TAXONOMIC_RANKS.index(colum)
+                if index_of_filter <= TAXONOMIC_RANKS.index(column_name):
                     chunk = chunk[chunk[colum].isin(filter_values)]
 
 
@@ -263,13 +263,7 @@ def calculate_data_of_df(data_path: str,filter_colums=None, filters=None):
     return model_count_dict
     
 
-taxonomic_ranks = [
-    'class',
-    'order',
-    'family',
-    'genus',
-    'acceptedScientificName'
-]
+
 
 def initial_df_processing(df_occurrences, training, column_filters, filters,taxon_index):
     total_counts = {} # Contains a dictionary of the taxon name with the number of existing data points.
@@ -281,7 +275,7 @@ def initial_df_processing(df_occurrences, training, column_filters, filters,taxo
             # Apply each specified column filter
             
             for col_name, filter_value in zip(column_filters, filters):
-                index_of_filter = taxonomic_ranks.index(col_name)
+                index_of_filter = TAXONOMIC_RANKS.index(col_name)
                 if index_of_filter <= taxon_index:
                     chunk = chunk[chunk[col_name].isin(filter_value)]
         values = []
@@ -333,14 +327,14 @@ def filter_chunk(chunk: pd.DataFrame,  counts_with_transformations_and_crops: di
 def train_model(model, train_folder_path, model_name, start_time_func, execution_time_process_chunk, model_folder):
     start_time_train = time.time()
     
-    train_yolo_model(model=model,model_name=model_name, train_folder_path=train_folder_path,model_folder=model_folder)
+    results = train_yolo_model(model=model,model_name=model_name, train_folder_path=train_folder_path,model_folder=model_folder)
     
     end_time_func = time.time()
     execution_time_func = end_time_func - start_time_func
     execution_time_train = end_time_func - start_time_train
 
     save_information(model_folder, execution_time_func, execution_time_train, execution_time_process_chunk)
-    return "Train Completed"
+    return results
     
 def save_information(model_folder,execution_time_func,execution_time_train,execution_time_process_chunk):
     end_time_func = time.time()
@@ -366,7 +360,8 @@ def train(
         train_folder_path = TRAINING_DEST_PATH,
         resume = False,
         download_images_bool = True,
-        save_context = None
+        save_context = None,
+        delete_previus_model = False
     ):
 
     start_time_func = time.time()
@@ -391,7 +386,7 @@ def train(
         
     if download_images_bool:
         empty_folder(temp_image_path)  # Empty the temporary training image folder.
-    training = taxonomic_ranks[taxon_index]
+    training = TAXONOMIC_RANKS[taxon_index]
     
     chunksize = 10**3
     df_occurrences = pd.read_csv(PROCESSED_DATA_CSV, chunksize=chunksize, delimiter=',', low_memory=False, on_bad_lines='skip')
@@ -453,7 +448,8 @@ def train(
     info(MODEL_INIT)
     chek_folder(model_folder)
     if download_images_bool:
-        if os.path.exists(model_folder):
+        
+        if delete_previus_model and os.path.exists(model_folder):
             empty_folder(model_folder)
             os.rmdir(model_folder)
             
@@ -478,17 +474,18 @@ def train(
             model = chek_model(MODEL_INIT)
         
         # Train yolo bool    
-        train_model(model, 
+        results = train_model(model, 
             train_folder_path, 
             model_name,
             start_time_func,
             execution_time_process_chunk,
             model_folder)
         
+        model_folder = results.save_dir
         
 
         # If we reach the species identification step, the taxonomic rank will be the last in the list. Save the filter list to a txt file for result analysis.
-        if taxonomic_ranks[taxon_index] == taxonomic_ranks[-1]:
+        if TAXONOMIC_RANKS[taxon_index] == TAXONOMIC_RANKS[-1]:
             with open(os.path.join(model_folder,'data.txt'), 'w') as file:
                 for filter_item in filters:
                     for filter in filter_item:
@@ -503,16 +500,16 @@ def train(
             if taxon_index == 0 and second_loop == 1:
                 info("second loop")
             
-            if taxon_index < len(taxonomic_ranks) - 1:
+            if taxon_index < len(TAXONOMIC_RANKS) - 1:
                 next_column_filters = column_filters.copy()
                 next_filters = filters.copy()
 
                 traing_bool = True
-                if taxonomic_ranks[taxon_index] not in next_column_filters:
-                    next_column_filters.append(taxonomic_ranks[taxon_index])
+                if TAXONOMIC_RANKS[taxon_index] not in next_column_filters:
+                    next_column_filters.append(TAXONOMIC_RANKS[taxon_index])
                     next_filters.append([key])
                 else:
-                    index_filter = next_column_filters.index(taxonomic_ranks[taxon_index])
+                    index_filter = next_column_filters.index(TAXONOMIC_RANKS[taxon_index])
                     if key in next_filters[index_filter]:
                         next_filters[index_filter] = [key]
                     else:
@@ -540,14 +537,16 @@ def train(
                 
                 # Recursive training
                 if traing_bool:
-                    next_model_folder = os.path.join(model_folder,f"{taxonomic_ranks[taxon_index]}_{key}")
+                    next_model_folder = os.path.join(model_folder,f"{TAXONOMIC_RANKS[taxon_index]}_{key}")
                     train(
                         model_folder=next_model_folder,
                         column_filters=next_column_filters,
                         filters=next_filters,
                         taxon_index=taxon_index+1,
                         path_model_to_train=path_to_model,
-                        resume=resume)
+                        resume=resume,
+                        delete_previus_model=delete_previus_model
+                    )
 
             else:
                 info(f"Finished {column_filters} of {filters}")
@@ -586,9 +585,9 @@ if __name__ == "__main__":
             empty_folder(path)
 
         directories = get_directories(IMAGES_FOLDER)
-        train_folder(taxonomic_ranks[0][0], IMAGES_FOLDER)
+        train_folder(TAXONOMIC_RANKS[0][0], IMAGES_FOLDER)
 
-        for taxon, index in taxonomic_ranks:
+        for taxon, index in TAXONOMIC_RANKS:
             for name in get_folders_by_level(IMAGES_FOLDER, max_level=index):
                 directories = get_directories(IMAGES_FOLDER)
                 name = str(name).split("/")[-1]
@@ -596,11 +595,11 @@ if __name__ == "__main__":
                 train_folder(model_name, name)
     else:
         filter_colums=[
-            taxonomic_ranks[0],
-            taxonomic_ranks[1],
-            taxonomic_ranks[2],
-            taxonomic_ranks[3],
-            taxonomic_ranks[4]
+            TAXONOMIC_RANKS[0],
+            TAXONOMIC_RANKS[1],
+            TAXONOMIC_RANKS[2],
+            TAXONOMIC_RANKS[3],
+            TAXONOMIC_RANKS[4]
             ]
         
         filters=[
@@ -613,5 +612,12 @@ if __name__ == "__main__":
         
         taxon_index = 0
         # calculate_data_of_df(PROCESSED_DATA_CSV,filter_colums=filter_colums,filters=filters)
-        train(column_filters=filter_colums,filters=filters,taxon_index=taxon_index,train_folder_path=TRAINING_DEST_PATH,download_images_bool=True)
+        train(
+            column_filters=filter_colums,
+            filters=filters,
+            taxon_index=taxon_index,
+            train_folder_path=TRAINING_DEST_PATH,
+            download_images_bool=True,
+            delete_previus_model=False
+        )
 
