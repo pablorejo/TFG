@@ -8,8 +8,6 @@ from requests.exceptions import RequestException, Timeout
 from ultralytics import YOLO
 from PIL import Image, UnidentifiedImageError
 from multiprocessing import cpu_count
-from pathlib import Path
-from torch.utils.data import Dataset
 
 def improve_contrast(image):
     lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
@@ -23,8 +21,7 @@ def denoise_image(image):
     return cv2.GaussianBlur(image, (5, 5), 0)
 
 def augment_image(image_path: str, number: int):
-
-    from conf import IMAGE_SIZE, warning
+    # from conf import IMAGE_SIZE, warning
     # Define an augmentation sequence
     augmentation_sequence = iaa.Sequential([
         iaa.Fliplr(0.5),  # Horizontal flip with 50% probability
@@ -72,9 +69,8 @@ def convert_to_webp(input_image_path: str, output_image_path="", quality=100, re
     remove_original (bool): Whether to delete the original image after conversion.
     only_rescale (bool): Whether to only resize the image without saving it in WebP format.
     """
-    from conf import warning, info, fail, IMAGE_SIZE
     if output_image_path == "":
-        output_image_path = input_image_path.split(".")[0] + ".webp"
+        output_image_path = input_image_path.rsplit(".", 1)[0] + ".webp"
     try:
         with Image.open(input_image_path) as image:
             img_adjusted = image.resize((IMAGE_SIZE, IMAGE_SIZE), Image.LANCZOS)
@@ -82,18 +78,14 @@ def convert_to_webp(input_image_path: str, output_image_path="", quality=100, re
                 img_adjusted.save(output_image_path, 'WEBP', quality=quality)
                 info(f"Image successfully converted: {output_image_path}")
                 if remove_original:
-                    image.close()
                     os.remove(input_image_path)
-            else:
-                image.close()
-
+            img_adjusted.close()
     except UnidentifiedImageError:
         warning(f"Unidentifiable image: {input_image_path}, proceeding to delete.")
-        os.remove(input_image_path)
-
+        if os.path.exists(input_image_path):
+            os.remove(input_image_path)
     except FileNotFoundError:
         warning(f"File not found: {input_image_path}")
-
     except Exception as e:
         warning(f"An exception occurred with the image: {input_image_path}\nError: {e}")
     return output_image_path
@@ -114,8 +106,10 @@ def is_corrupt_image(image_path):
         return False  # The image opened and verified correctly
     except UnidentifiedImageError:
         return True  # The image is corrupt or not an identifiable format
-    except Exception:
-        return False
+    except Exception as e:
+        # Log the exception if necessary
+        fail(f"Unexpected error checking image: {e} set corrupt true")
+        return True
 
 def discard_bad_image(img_path,model_to_discard, ask=False, confidence=0.90):
     """Discards images that are not useful for the project according to the model already trained by YOLO
@@ -126,51 +120,43 @@ def discard_bad_image(img_path,model_to_discard, ask=False, confidence=0.90):
     confidence: The confidence level you want the model to have between (0,1), default is 0.85
     
     Returns: True if the image is good, False if it is bad or not a file"""
-    from conf import types, info, warning, fail, VERBOSE
+    # from conf import types, info, warning, fail, VERBOSE
     try:
         # Make a prediction on the image
-        results = model_to_discard.predict(img_path,verbose=VERBOSE,device='cpu')
+        results = model_to_discard.predict(img_path, verbose=VERBOSE, device='cpu')
         
-        # Assuming `results` is a list of `Results` objects
         for result in results:
-            # Access bounding boxes, confidences, and classes
             probs = result.probs  # Probs object for classification outputs
-
-            # Get the index of the top 1 class (the most probable)
             top1_class_index = probs.top1
-
-            # Get the confidence of the top 1 class
             top1_confidence = probs.top1conf
 
             if result.names[top1_class_index] == types['bad']:
                 if os.path.isfile(img_path) or os.path.islink(img_path):
-                    
                     if top1_confidence < confidence and ask:
                         with Image.open(img_path) as image:
-                            # Show the image
                             image.show()
                             print(f"Most probable class: {result.names[top1_class_index]} with confidence {top1_confidence}\n")
                             response = input('Do you want to delete the image? (y/n)\n')
-                            if response == 'y':
+                            if response.lower() == 'y':
                                 os.remove(img_path)
                                 info("You indicated the image is bad")
-                                return False  # The image is bad
+                                return False
                             else: 
                                 info("You indicated the image is good")
-                                return True  # The image is good
+                                return True
                     else: 
                         os.remove(img_path)
                         warning("The image is bad")
-                        return False  # The image is bad
+                        return False
                 else:
                     fail("The image is not a file") 
-                    return False  # The image is not a file
+                    return False
             else: 
                 info("The image is good")
-                return True  # The image is good
+                return True
     except NameError as e:
         warning(f"The discard model does not exist, so return true: {e}")
-        return True  # The discard model does not exist, so return true
+        return True
     except Exception as e:
         warning(f"{e}")
         return True
@@ -185,48 +171,57 @@ def crop_images(src_img: str, model_to_crop: YOLO , model_to_discard: YOLO, dele
     
     Returns: An array with the paths of the cropped images.
     """
-    from conf import DETECT_MODEL_PATH,chek_model, info, warning, fail,VERBOSE
+    # from conf import DETECT_MODEL_PATH,chek_model, info, warning, fail,VERBOSE
     image = cv2.imread(src_img)
     if image is None:
         info(f"Error reading image: {src_img}")
         return []
 
-    results = model_to_crop(image,verbose=VERBOSE,device='cpu')
+    try:
+        results = model_to_crop(image, verbose=VERBOSE, device='cpu')
+        base_name, _ = os.path.splitext(src_img)
+        number = 0
+        paths = []
 
-    base_name, _ = os.path.splitext(src_img)
-    number = 0
-    paths = []
+        for result in results:
+            # Get all bounding boxes
+            boxes = result.boxes
 
-    for result in results:
-        # Get all bounding boxes
-        boxes = result.boxes
+            for box in boxes:
+                if bool(box.conf > 0.8):
+                    # Extract the bounding box coordinates, converted to integers
+                    x_min, y_min, x_max, y_max = map(int, box.xyxy[0])
+                    
+                    # Crop the image using the coordinates
+                    cropped_img = image[y_min:y_max, x_min:x_max]
 
-        for box in boxes:
-            # Extract the bounding box coordinates, converted to integers
-            x_min, y_min, x_max, y_max = map(int, box.xyxy[0])
-            
-            # Crop the image using the coordinates
-            cropped_img = image[y_min:y_max, x_min:x_max]
+                    # Save the cropped image
+                    cropped_img_path = f'{base_name}_cropped_{number}.jpg'
+                    cv2.imwrite(cropped_img_path, cropped_img)
 
-            # Save the cropped image
-            cropped_img_path = f'{base_name}_cropped_{number}.jpg'
-            cv2.imwrite(cropped_img_path, cropped_img)
-            
-            if discard_bad_image(cropped_img_path,model_to_discard):
-                number += 1
-                paths.append(cropped_img_path)
-                info(f'Cropped image saved at: {cropped_img_path}')
-                
-    if delete_original:
-        os.remove(src_img)
-    else:
-        paths.append(src_img)
+                    
+                    if discard_bad_image(cropped_img_path, model_to_discard):
+                        number += 1
+                        paths.append(cropped_img_path)
+                        info(f'Cropped image saved at: {cropped_img_path}')
+                    else:
+                        os.remove(cropped_img_path)
+
+    except Exception as e:
+        warning(f"Error processing image {src_img}: {str(e)}")
+        return []
+
+    finally:
+        del image
+        if delete_original:
+            os.remove(src_img)
+        else:
+            paths.append(src_img)
+
     return paths
 
-def download_image(url, full_path, max_retries=3, timeout=5):
+def download_image(url, full_path, max_retries=2, timeout=3):
     """download a image and save it
-    
-
     Args:
         url (str): url to img to download
         full_path (str): path where you want to save the image
@@ -236,23 +231,26 @@ def download_image(url, full_path, max_retries=3, timeout=5):
     Returns:
         bool: true if download correct false if not
     """
-    from conf import warning, info, fail
+    response = None
+    
+    # # from conf import warning, info, fail
     for attempt in range(max_retries):
         try:
             response = requests.get(url, timeout=timeout)
             if response.status_code == 200:
                 with open(full_path, 'wb') as file:
                     file.write(response.content)
-                    file.close()
-                    info(f"Image {full_path} correctly download")
+                info(f"Image {full_path} correctly download")
                 return True
         except (RequestException, Timeout) as e:
             warning(f"URL error: {url} (attempt {attempt+1}/{max_retries}) - {str(e)}")
-            time.sleep(1)  # Exponential backoff
+            
     fail(f'Image with URL error: {url}, could not be download')
+    if response:
+        response.close()
     return False
 
-def train_yolo_model(model: YOLO, model_name, train_folder_path, model_folder):
+def train_yolo_model(model: YOLO, model_name, train_folder_path, model_folder,epochs):
     info(f"{model_name} {train_folder_path} {model_folder}")
     """this def train a model based on configurations sets in conf.py and parameters recevied
 
@@ -269,22 +267,22 @@ def train_yolo_model(model: YOLO, model_name, train_folder_path, model_folder):
     else:
         torch.cuda.set_device(0)
         torch.cuda.empty_cache()
-        model = model.to('cuda')  # Asegúrate de mover el modelo a la GPU
-
-    num_workers = 8  # Puedes ajustar este número según tus necesidades
+        model.to(DEVICE)  
+        info(f"Using GPU: {torch.cuda.get_device_name(0)}")
 
     
     try:
-        model.train(
+        results = model.train(
             data=train_folder_path,
-            epochs=TRAIN_EPOCHS,
+            epochs=epochs,
             imgsz=IMAGE_SIZE,
             name=model_name,
             project=model_folder,
             device=DEVICE,
-            amp=True,
-            batch=8,
-            workers=num_workers
+            amp=True,   
+            batch=BATCH,
+            workers=NUM_WORKERS
         )
+        return results
     except RuntimeError as e:
         print(f"Error during training: {e}")

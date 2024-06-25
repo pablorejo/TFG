@@ -11,7 +11,7 @@ def main():
     model = chek_model(MODEL_INIT)
     model_folder = chek_folder(path.join(PATH_MODELS_TRAINED,NAME_MODEL_DISCARD))
     info(model_folder)
-    train_yolo_model(model,model_name=NAME_MODEL_DISCARD,train_folder_path=TRAINING_DEST_PATH,model_folder=model_folder)
+    train_yolo_model(model,model_name=NAME_MODEL_DISCARD,train_folder_path=TRAINING_DEST_PATH,model_folder=model_folder, epochs=30)
     
 if __name__ == "__main__":
     main()

@@ -72,9 +72,6 @@ def chek_folder(folder: str):
     if not os.path.exists(folder):
         os.makedirs(folder)
     return folder
-    
-
-
 
 SHUFFLE_DATAFRAME = False  # Indicates if the dataframe should be shuffled, useful for getting random data from the dataframe
 TRAIN_LOCAL = False  # This means training will be done locally with the images already downloaded in the defined folder
@@ -83,8 +80,7 @@ DETECTION_IMAGE_PATH = chek_folder("detection_images")
 DISCARD_IMAGE_PATH = chek_folder("discard_images")
 PATH_MODELS_TRAINED = chek_folder(os.path.join('runs','classify'))
 MODELS_FOLDER_PATH = chek_folder('yolo_models')
-MODEL_INIT = os.path.join(MODELS_FOLDER_PATH,'yolov8n-cls.pt')  
-model_init = chek_model(MODEL_INIT)
+MODEL_INIT = os.path.join(MODELS_FOLDER_PATH,'yolo_init.pt') # this is a training model in class rank  
 
 NAME_MODEL_DISCARD = 'yolo_discard'
 DISCARD_MODEL_PATH = os.path.join(MODELS_FOLDER_PATH,f'{NAME_MODEL_DISCARD}.pt') 
@@ -94,32 +90,30 @@ DETECT_MODEL_PATH = os.path.join(MODELS_FOLDER_PATH,f'{NAME_MODEL_DETECT}.pt')
     
 PANDAS_CSV_PATH = chek_folder('pandas_files')
 # This file contains the URLs with the already processed images.
-PROCESSED_DATA_CSV = os.path.join(PANDAS_CSV_PATH,'parsed_occurrences_all.csv')
+PROCESSED_DATA_CSV = os.path.join(PANDAS_CSV_PATH,'parsed_occurrences.csv')
 
 # This file contains the URLs with all the images, processed and unprocessed.
-ALL_DATA_CSV = os.path.join(PANDAS_CSV_PATH,'parsed_occurrences_all.csv')  # All images regardless of quality
+ALL_DATA_CSV = os.path.join(PANDAS_CSV_PATH,'parsed_occurrences.csv')  # All images regardless of quality
 
-if not os.path.exists(PROCESSED_DATA_CSV):
-    fail(f"File {PROCESSED_DATA_CSV} does not exist. A CSV file with the data is required.")
-    print("""What do you want to do?
-1) Use the all data CSV file as the processed file
-2) Cancel
-3) Continue anyway""")
-    number = int(input(": "))
-    if os.path.exists(ALL_DATA_CSV):
-        if number == 1:
-            PROCESSED_DATA_CSV = ALL_DATA_CSV
-        elif number == 2:
-            exit(0)
+if __name__ == "__main__":
+    if not os.path.exists(PROCESSED_DATA_CSV):
+        fail(f"File {PROCESSED_DATA_CSV} does not exist. A CSV file with the data is required.")
+        print("""What do you want to do?
+    1) Use the all data CSV file as the processed file
+    2) Cancel
+    3) Continue anyway""")
+        number = int(input(": "))
+        if os.path.exists(ALL_DATA_CSV):
+            if number == 1:
+                PROCESSED_DATA_CSV = ALL_DATA_CSV
+            elif number == 2:
+                exit(0)
+            else:
+                pass
         else:
-            pass
-    else:
-        fail(f"File {ALL_DATA_CSV} does not exist. A CSV file with the data is required to execute yolo_train_img.\n")
+            fail(f"File {ALL_DATA_CSV} does not exist. A CSV file with the data is required to execute yolo_train_img.\n")
 
 Image.MAX_IMAGE_PIXELS = None  # Allow unlimited image size
-
-IMAGE_SIZE = 640
-TRAIN_EPOCHS = 30
 
 # DEVICE Specifies the computational device(s) options:
 ## 'cpu': train in cpu
@@ -127,8 +121,8 @@ TRAIN_EPOCHS = 30
 ## 0,1: multiple GPUs
 ## 0: single GPU
 # DEVICE = 0
-DEVICE = 'cuda' if torch.cuda.is_available() else "cpu"
-# DEVICE = "cpu"
+# DEVICE = 'cuda:0' if torch.cuda.is_available() else "cpu"
+DEVICE = "cpu"
 
 # Path to the folder containing all images
 IMAGES_FOLDER = chek_folder('images')
@@ -147,7 +141,6 @@ OCCURRENCE_DATA = os.path.join(DISCARD_TXT_PATH, 'occurrence.txt')
 
 
 # Path where the training data will be stored
-DATA_CONFIGURATIONS_YAML = chek_folder('train_configurations')
 TRAINING_DEST_PATH = chek_folder(os.path.join('datasets','imagenet10'))
 training_data_path = {
     'train': 'train',
@@ -164,25 +157,69 @@ training_detect_data_path = {
 
 # Taxonomic ranks and their folder recursion levels for recursive training
 TAXONOMIC_RANKS = [
-    ('class', 1),
-    ('order', 2),
-    ('family', 3),
-    ('genus', 4)
-    # ,('species',5)
+    'class',
+    'order',
+    'family',
+    'genus',
+    'acceptedScientificName'
 ]
 
-# Training percentages for training, validation, and testing
-VALIDATION_PERCENTAGE = 0.2
-TESTING_PERCENTAGE = 0.2
-TRAINING_PERCENTAGE = 1 - TESTING_PERCENTAGE - VALIDATION_PERCENTAGE
-IMAGE_SAMPLE_COUNT = 400  # Maximum number of images per distinct class. Minimum should be 3.
-if IMAGE_SAMPLE_COUNT < 3:
-    fail(f"There must be at least 3 images per category")
-    exit(-1)
 
-TRANSFORMATIONS_PER_IMAGE = 4  # Specifies how many transformations each image should undergo.
-TOTAL_IMAGES_PER_CLASS = IMAGE_SAMPLE_COUNT + IMAGE_SAMPLE_COUNT*TRANSFORMATIONS_PER_IMAGE
-CONF_TOP_5 = 0.9
+
+# Training percentages for training, validation, and testing
+VALIDATION_PERCENTAGE = 0.1
+TESTING_PERCENTAGE = 0.05
+TRAINING_PERCENTAGE = 1 - TESTING_PERCENTAGE - VALIDATION_PERCENTAGE
+MAX_NUM_OF_CROPS = 3 # In a image only crop 5 times
+# IMAGE_SAMPLE_COUNT = [
+#     15000,
+#     10000,
+#     8000,
+#     6000,
+#     2000
+# ]
+IMAGE_SAMPLE_COUNT = [
+    1,
+    1,
+    1,
+    1,
+    1
+]
+
+TRANSFORMATIONS_PER_IMAGE = 5  # Specifies how many transformations each image should undergo.
+def total_image_per_cat(taxon_index):
+    return IMAGE_SAMPLE_COUNT[taxon_index] + IMAGE_SAMPLE_COUNT[taxon_index] * TRANSFORMATIONS_PER_IMAGE
+
+NUM_WORKERS = 8 # If use cuda for train number of process usees per gpu
+BATCH = 4 # Number of bathsize, increase ram use.
+IMAGE_SIZE = 1024
+# IMAGE_SIZE = 128
+# TRAIN_EPOCHS = [
+#     45,
+#     40,
+#     35,
+#     30,
+#     25
+# ]
+TRAIN_EPOCHS = [
+    3,
+    3,
+    3,
+    3,
+    3
+]
+
+CONF_TOP_5 = 0.9 # Conf to discard model if conf is less than this de image is bad.
 PRIORITY = -10  # Sets the priority of processes in the system; requires running as sudo negative num more priority
 
+
 USE_THREADS_TO_DOWNLOAD = True # If you want download data with threads (quickly) set it True if you want sequence set it False
+USE_PROCESS_TO_DOWNLOAD = True
+NUMBER_OF_PROCESS = 8
+USE_PROCESS_TO_AUMENT_IMG = False
+
+NUMBER_OF_PROCESS_PANDAS = 14
+MAX_THREADS_DOWNLOADING_PER_PROCESS = 15
+
+USE_PROCESS_TO_COPI_IMG = False
+NUMBER_OF_PROCESS_TO_COPY = 14

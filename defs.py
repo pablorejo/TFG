@@ -5,7 +5,8 @@ import shutil  # To copy images to the training folder
 import math
 import pandas as pd
 from conf import *
-
+from multiprocessing import Pool, Process
+from threading import Thread,Semaphore
 def parse_name(name):
     """Processes the string so it can be a valid file name.
 
@@ -141,10 +142,13 @@ def copy_to_training(folder_path,dest_path):
             Returns: true if there are images in the training folders
     """
     
-    from conf import warning, info, fail
+    # from conf import warning, info, fail
     empty_folder(dest_path)  # Empty the training image folder
     folders = get_folders_by_level(folder_path, 1)
+    
+    
     for folder in folders:
+        info(f"coping images from folder: {folder}")
         copy_to_training_lines(dest_path,os.path.split(folder)[1], find_images(folder, extensions=['.webp', '.jpg']))
     
     if not os.listdir(dest_path):
@@ -152,6 +156,8 @@ def copy_to_training(folder_path,dest_path):
         
     return os.listdir(dest_path)
 
+
+    
 def copy_to_training_lines(dest_path,data_type, lines, txt_associated=False):
     """Copies images to the training folder.
     
@@ -161,20 +167,39 @@ def copy_to_training_lines(dest_path,data_type, lines, txt_associated=False):
     data_type (str): The type of data, e.g., 'Bivalvia', 'Caudofaveata'.
     txt_associated (bool): Boolean that indicate if you want to copy also a file with same name that ends in txt.
     """
-    from conf import TESTING_PERCENTAGE, TRAINING_PERCENTAGE, VALIDATION_PERCENTAGE,training_data_path, warning, info, VERBOSE
+    # from conf import TESTING_PERCENTAGE, TRAINING_PERCENTAGE, VALIDATION_PERCENTAGE,training_data_path, warning, info, VERBOSE
     if len(lines) >= 3:
 
         num_train = math.floor(len(lines) * TRAINING_PERCENTAGE)
         num_valid = math.floor(len(lines) * VALIDATION_PERCENTAGE)
         
-        for i in range(num_train):
-            copy_file(lines[i], os.path.join(dest_path,training_data_path["train"], data_type), txt_associated)
-        
-        for i in range(num_train, num_train + num_valid):
-            copy_file(lines[i], os.path.join(dest_path,training_data_path["valid"], data_type), txt_associated)
+        def process_lines(segment, folder):
             
-        for i in range(num_train + num_valid, len(lines)):
-            copy_file(lines[i], os.path.join(dest_path,training_data_path["test"], data_type), txt_associated)
+            if USE_PROCESS_TO_COPI_IMG:
+                args = [
+                    os.path.join(dest_path, folder, data_type),
+                    txt_associated
+                ]
+                args_folders = [(line, *args) for line in segment]
+                with Pool(processes=NUMBER_OF_PROCESS_TO_COPY) as copi_pool:
+                    copi_pool.starmap(copy_file, args_folders)
+            else:
+                for line in segment:
+                    dest = os.path.join(dest_path, folder, data_type)
+                    copy_file(line,dest)
+                
+        # Copiar datos de entrenamiento
+        info(f'Copi data type: {data_type} to train')
+        process_lines(lines[:num_train-1], training_data_path['train'])
+
+        # Copiar datos de validación
+        info(f'Copi data type: {data_type} to valid')
+        process_lines(lines[num_train-1:num_train + num_valid-1], training_data_path['valid'])
+
+        # Copiar datos de prueba
+        info(f'Copi data type: {data_type} to test')
+        process_lines(lines[num_train + num_valid-1:], training_data_path['test'])
+            
     else:
         warning(f"Not enough images\nImages:\n")
         if VERBOSE:
@@ -262,8 +287,9 @@ def empty_folder(folder_path):
 def get_GBIF(path: str):
     return os.path.split(path)[-1]
 
-def copy_file(source_path, dest_path, txt_associated: bool = False):
+def copy_file(source_path, dest_path, txt_associated: bool = False,semaphore = None):
     """Copies a  file to a folderand creates the folder if it doesn't exist"""
+    
     if not os.path.exists(dest_path):
         os.makedirs(dest_path,exist_ok=True)
     shutil.copy(source_path, os.path.join(dest_path, get_GBIF(source_path)))
@@ -271,6 +297,7 @@ def copy_file(source_path, dest_path, txt_associated: bool = False):
     if txt_associated:
         source_path = str(source_path).split(".")[0] + ".txt"
         shutil.copy(source_path, os.path.join(dest_path, get_GBIF(source_path)))
+        
 
 def shuffle_DataFrame(df: pd.DataFrame):
     """This function shuffles a dataframe to be random and saves it in a CSV designated in PROCESSED_DATA_CSV.
@@ -280,7 +307,7 @@ def shuffle_DataFrame(df: pd.DataFrame):
         
     return: Returns a new list of chunks with shuffled files.
     """
-    from conf import PROCESSED_DATA_CSV, info, warning, fail
+    # from conf import PROCESSED_DATA_CSV, info, warning, fail
     # Define the output file name by adding 'shuffled_' to the original file name.
     
     # Initialize an empty list to store the shuffled chunks.
