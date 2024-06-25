@@ -121,8 +121,8 @@ Image.MAX_IMAGE_PIXELS = None  # Allow unlimited image size
 ## 0,1: multiple GPUs
 ## 0: single GPU
 # DEVICE = 0
-# DEVICE = 'cuda:0' if torch.cuda.is_available() else "cpu"
-DEVICE = "cpu"
+DEVICE = 'cuda:0' if torch.cuda.is_available() else "cpu"
+# DEVICE = "cpu"
 
 # Path to the folder containing all images
 IMAGES_FOLDER = chek_folder('images')
@@ -171,43 +171,43 @@ VALIDATION_PERCENTAGE = 0.1
 TESTING_PERCENTAGE = 0.05
 TRAINING_PERCENTAGE = 1 - TESTING_PERCENTAGE - VALIDATION_PERCENTAGE
 MAX_NUM_OF_CROPS = 3 # In a image only crop 5 times
-# IMAGE_SAMPLE_COUNT = [
-#     15000,
-#     10000,
-#     8000,
-#     6000,
-#     2000
-# ]
 IMAGE_SAMPLE_COUNT = [
-    1,
-    1,
-    1,
-    1,
-    1
+    5000,
+    4000,
+    3000,
+    2000,
+    600
 ]
+MIN_SAMPLE_PER_CATEGORY = 0.3 # 30% of the total image per cat.
+# IMAGE_SAMPLE_COUNT = [
+#     1,
+#     1,
+#     1,
+#     1,
+#     1
+# ]
 
-TRANSFORMATIONS_PER_IMAGE = 5  # Specifies how many transformations each image should undergo.
+TRANSFORMATIONS_PER_IMAGE = 2  # Specifies how many transformations each image should undergo.
 def total_image_per_cat(taxon_index):
     return IMAGE_SAMPLE_COUNT[taxon_index] + IMAGE_SAMPLE_COUNT[taxon_index] * TRANSFORMATIONS_PER_IMAGE
 
 NUM_WORKERS = 8 # If use cuda for train number of process usees per gpu
 BATCH = 4 # Number of bathsize, increase ram use.
 IMAGE_SIZE = 1024
-# IMAGE_SIZE = 128
-# TRAIN_EPOCHS = [
-#     45,
-#     40,
-#     35,
-#     30,
-#     25
-# ]
 TRAIN_EPOCHS = [
-    3,
-    3,
-    3,
-    3,
-    3
+    45,
+    40,
+    35,
+    30,
+    25
 ]
+# TRAIN_EPOCHS = [
+#     3,
+#     3,
+#     3,
+#     3,
+#     3
+# ]
 
 CONF_TOP_5 = 0.9 # Conf to discard model if conf is less than this de image is bad.
 PRIORITY = -10  # Sets the priority of processes in the system; requires running as sudo negative num more priority
@@ -216,10 +216,10 @@ PRIORITY = -10  # Sets the priority of processes in the system; requires running
 USE_THREADS_TO_DOWNLOAD = True # If you want download data with threads (quickly) set it True if you want sequence set it False
 USE_PROCESS_TO_DOWNLOAD = True
 NUMBER_OF_PROCESS = 8
-USE_PROCESS_TO_AUMENT_IMG = False
+USE_PROCESS_TO_AUMENT_IMG = True
 
 NUMBER_OF_PROCESS_PANDAS = 14
 MAX_THREADS_DOWNLOADING_PER_PROCESS = 15
 
-USE_PROCESS_TO_COPI_IMG = False
+USE_PROCESS_TO_COPI_IMG = True
 NUMBER_OF_PROCESS_TO_COPY = 14

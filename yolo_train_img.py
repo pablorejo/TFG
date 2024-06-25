@@ -486,7 +486,14 @@ def filter_chunk_all(dfs,key,value,chunksize,size_chunk_list = NUMBER_OF_PROCESS
 def train_model(model, train_folder_path, model_name, start_time_func, execution_time_process_chunk, model_folder,taxon_index):
     start_time_train = time.time()
     
-    results = train_yolo_model(model=model,model_name=model_name, train_folder_path=train_folder_path,model_folder=model_folder)
+    results = train_yolo_model(
+            model=model,
+            model_name=model_name,
+            train_folder_path=train_folder_path,
+            model_folder=model_folder,
+            epochs=TRAIN_EPOCHS[taxon_index]
+        )
+    
     end_time_func = time.time()
     execution_time_func = end_time_func - start_time_func
     execution_time_train = end_time_func - start_time_train
