@@ -281,13 +281,10 @@ def calculate_data_of_df(data_path: str,filter_colums=None, filters=None,print_b
     total_lines = 0
 
     for column_name in TAXONOMIC_RANKS:
-    for column_name in TAXONOMIC_RANKS:
         df = pd.read_csv(data_path, chunksize=chunksize, delimiter=',', low_memory=False, on_bad_lines='skip')
         unique_values = set()
         for chunk in df:
             for colum, filter_values in zip(filter_colums,filters):
-                index_of_filter = TAXONOMIC_RANKS.index(colum)
-                if index_of_filter <= TAXONOMIC_RANKS.index(column_name):
                 index_of_filter = TAXONOMIC_RANKS.index(colum)
                 if index_of_filter <= TAXONOMIC_RANKS.index(column_name):
                     chunk = chunk[chunk[colum].isin(filter_values)]
@@ -490,18 +487,13 @@ def train_model(model, train_folder_path, model_name, start_time_func, execution
     start_time_train = time.time()
     
     results = train_yolo_model(model=model,model_name=model_name, train_folder_path=train_folder_path,model_folder=model_folder)
-    
-    results = train_yolo_model(model=model,model_name=model_name, train_folder_path=train_folder_path,model_folder=model_folder,epochs=TRAIN_EPOCHS[taxon_index])
     end_time_func = time.time()
     execution_time_func = end_time_func - start_time_func
     execution_time_train = end_time_func - start_time_train
     save_information(model_folder, execution_time_func, execution_time_train, execution_time_process_chunk)
     return results
-    return results
     
 def save_information(model_folder,execution_time_func,execution_time_train,execution_time_process_chunk):
-    end_time_func = time.time()
-    # play notification sound
     noti()
     info(f"The function took {execution_time_func} seconds to execute.")
     info(f"The train took {execution_time_train} seconds to execute.")
@@ -525,8 +517,6 @@ def train(
         train_folder_path = TRAINING_DEST_PATH,
         resume = False,
         download_images_bool = True,
-        save_context = None,
-        delete_previus_model = False
         save_context = None,
         delete_previus_model = False
     ):
@@ -565,7 +555,15 @@ def train(
         # Load previous state if resuming
         initial_counts, total_counts, dfs = initial_df_processing(df_occurrences, training, column_filters, filters,taxon_index)
         
-        # Get previous chunk data and filter it
+        # delete categories who dont have de minimun of image per sample.
+        total_counts_correct = {}
+        initial_counts = {}
+        for key,value in total_counts.items():
+            if value > (total_image_per_cat(taxon_index) * MIN_SAMPLE_PER_CATEGORY):
+                initial_counts[key] = 0
+                total_counts_correct[key] = value
+        total_counts = total_counts_correct.copy()
+        del total_counts_correct
         
         
         if USE_PROCESS_TO_DOWNLOAD:
@@ -706,7 +704,6 @@ def train(
         
         # Train yolo bool    
         results = train_model(model, 
-        results = train_model(model, 
             train_folder_path, 
             model_name,
             start_time_func,
@@ -723,7 +720,6 @@ def train(
 
         # If we reach the species identification step, the taxonomic rank will be the last in the list. Save the filter list to a txt file for result analysis.
         if TAXONOMIC_RANKS[taxon_index] == TAXONOMIC_RANKS[-1]:
-        if TAXONOMIC_RANKS[taxon_index] == TAXONOMIC_RANKS[-1]:
             with open(os.path.join(model_folder,'data.txt'), 'w') as file:
                 for filter_item in filters:
                     for filter in filter_item:
@@ -737,7 +733,6 @@ def train(
             if taxon_index == 0 and second_loop == 1:
                 info("second loop")
             
-            if taxon_index < len(TAXONOMIC_RANKS) - 1:
             if taxon_index < len(TAXONOMIC_RANKS) - 1:
                 next_column_filters = column_filters.copy()
                 next_filters = filters.copy()
@@ -829,7 +824,6 @@ if __name__ == "__main__":
         train_folder(TAXONOMIC_RANKS[0][0], IMAGES_FOLDER)
 
         for taxon, index in TAXONOMIC_RANKS:
-        for taxon, index in TAXONOMIC_RANKS:
             for name in get_folders_by_level(IMAGES_FOLDER, max_level=index):
                 directories = get_directories(IMAGES_FOLDER)
                 name = str(name).split("/")[-1]
@@ -842,23 +836,18 @@ if __name__ == "__main__":
             TAXONOMIC_RANKS[2],
             TAXONOMIC_RANKS[3],
             TAXONOMIC_RANKS[4]
-            TAXONOMIC_RANKS[0],
-            # TAXONOMIC_RANKS[1],
-            # TAXONOMIC_RANKS[2],
-            # TAXONOMIC_RANKS[3],
-            # TAXONOMIC_RANKS[4]
             ]
         
         filters=[
             ['Gastropoda', 'Bivalvia', 'Cephalopoda', 'Polyplacophora'],
-            # ['Cyrtodontida', 'Arcida', 'Sphaeriida', 'Venerida'],
-            # ['Arcidae', 'Pichleriidae', 'Cardiolidae', 'Glycymerididae', 'Anatinellidae', 'Veneridae'],
-            # ['Artena', 'Gratelupia', 'Pelecyora', 'Bassina', 'Atamarcia'],
-            # ['Antigona inca Olsson, 1939', 'Bassina disjecta (Perry, 1811)', 'Pelecyora corculum (Römer, 1870)', 'Antigona neglecta Clark, 1918', 'Pelecyora hatchetigbeensis (Aldrich, 1886)', 'Bassina yatei (Gray, 1835)']
+            ['Seguenziida', 'Ellobiida', 'Runcinida', 'Neogastropoda', 'Siphonariida', 'Trochida', 'Pleurotomariida', 'Umbraculida', 'Cyrtoneritida', 'Lepetellida', 'Aplysiida', 'Pteropoda', 'Littorinimorpha', 'Neomphalida', 'Pleurobranchida', 'Systellommatophora', 'Architaenioglossa', 'Cephalaspidea', 'Stylommatophora', 'Cycloneritida', 'Cocculinida', 'Nudibranchia'],
+            ['Helicarionidae', 'Euconulidae', 'Clausiliidae', 'Cochlicopidae', 'Draparnaudiidae', 'Endodontidae', 'Bothriembryontidae', 'Spelaeoconchidae', 'Pleurodiscidae', 'Pristilomatidae', 'Spelaeodiscidae', 'Pagodulinidae', 'Epirobiidae', 'Oreohelicidae', 'Epiphragmophoridae', 'Gastrodontidae', 'Sphincterochilidae', 'Valloniidae', 'Helicidae', 'Dorcasiidae', 'Cerionidae', 'Vertiginidae', 'Xanthonychidae', 'Ariophantidae', 'Lauriidae', 'Grandipatulidae', 'Fauxulidae', 'Spiraxidae', 'Megomphicidae', 'Archaeozonitidae', 'Oopeltidae', 'Eucalodiidae', 'Philomycidae', 'Orthalicidae', 'Elonidae', 'Canariellidae', 'Sagdidae', 'Subulinidae', 'Charopidae', 'Zachrysiidae', 'Pyramidulidae', 'Chondrinidae', 'Filholiidae', 'Hygromiidae', 'Helicodiscidae', 'Scolodontidae', 'Thysanophoridae', 'Polygyridae', 'Haplotrematidae', 'Diapheridae', 'Amastridae', 'Cylindrellinidae', 'Urocoptidae', 'Vitrinidae', 'Limacidae', 'Acavidae', 'Discidae', 'Orculidae', 'Chronidae', 'Ferussaciidae', 'Microcystidae', 'Zonitidae', 'Simpulopsidae', 'Megaspiridae', 'Achatinidae', 'Agriolimacidae', 'Helicodontidae', 'Pleurodontidae', 'Ariolimacidae', 'Dyakiidae', 'Argnidae', 'Milacidae', 'Succineidae', 'Bulimulidae', 'Boettgerillidae', 'Agardhiellidae', 'Azecidae', 'Achatinellidae', 'Holospiridae', 'Oxychilidae', 'Strobilopsidae', 'Cerastidae', 'Trissexodontidae', 'Macrocyclidae', 'Binneyidae', 'Anadenidae', 'Trochomorphidae', 'Athoracophoridae', 'Truncatellinidae', 'Palaeoxestinidae', 'Caryodidae', 'Odontocycladidae', 'Palaeostoidae', 'Testacellidae', 'Punctidae', 'Enidae', 'Oleacinidae', 'Plectopylidae', 'Geomitridae', 'Camaenidae', 'Parmacellidae', 'Gastrocoptidae', 'Cystopeltidae', 'Strophocheilidae', 'Odontostomidae', 'Amphibulimidae', 'Trichodiscinidae', 'Anadromidae', 'Partulidae', 'Rhytididae', 'Cepolidae', 'Solaropsidae', 'Streptaxidae', 'Clavatoridae', 'Pupillidae', 'Vidaliellidae', 'Arionidae', 'Urocyclidae', 'Labyrinthidae'],
+            ['Vidovicia', 'Cattania', 'Palaeotachea', 'Pseudotachea', 'Dinarica', 'Hemicycla', 'Rossmaessleria', 'Chilostoma', 'Isognomostoma', 'Cepaea', 'Causa', 'Levantina', 'Megalotachea', 'Alabastrina', 'Cantareus', 'Kollarix', 'Mesodontopsis', 'Theba', 'Iberus', 'Lindholmia', 'Thiessea', 'Gyrostomella', 'Iberellus', 'Neocrassa', 'Isaurica', 'Campylaea', 'Cornu', 'Kosicia', 'Tartessiberus', 'Parachloraea', 'Pseudoklikia', 'Otala', 'Massylaea', 'Lampadia', 'Helicigona', 'Liburnica', 'Cylindrus', 'Amanica', 'Allognathus', 'Pseudotrizona', 'Caucasotachea', 'Faustina', 'Loxana', 'Corneola', 'Arianta', 'Campylaeopsis', 'Tyrrheniberus', 'Delphinatia', 'Codringtonia', 'Tacheocampylaea', 'Paradrobacia', 'Josephinella', 'Helix', 'Marmorana', 'Discula', 'Macularia', 'Eobania', 'Drobacia', 'Eremina'],
+            ['Cornu Born, 1778', 'Cornu mazzullii (De Cristofori & Jan, 1832)', 'Cornu cephalaeditana (Giannuzzi-Savelli, Sparacio & Oliva, 1986)', 'Cornu insolida (Monterosato, 1892)', 'Cornu aspersum (O.F.Müller, 1774)']
             ]
         
         taxon_index = 0
-        # calculate_data_of_df(PROCESSED_DATA_CSV,filter_colums=filter_colums,filters=filters)
+        # calculate_data_of_df(PROCESSED_DATA_CSV,filter_colums=filter_colums,filters=filters,print_bool=True)
         train(
             column_filters=filter_colums,
             filters=filters,
@@ -867,11 +856,4 @@ if __name__ == "__main__":
             download_images_bool=True,
             delete_previus_model=False
         )
-        train(
-            column_filters=filter_colums,
-            filters=filters,
-            taxon_index=taxon_index,
-            download_images_bool=True,
-            delete_previus_model=False
-            )
 
