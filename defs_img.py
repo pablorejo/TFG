@@ -182,7 +182,7 @@ def crop_images(src_img: str, model_to_crop: YOLO , model_to_discard: YOLO, dele
         base_name, _ = os.path.splitext(src_img)
         number = 0
         paths = []
-
+        final = False
         for result in results:
             # Get all bounding boxes
             boxes = result.boxes
@@ -202,10 +202,16 @@ def crop_images(src_img: str, model_to_crop: YOLO , model_to_discard: YOLO, dele
                     
                     if discard_bad_image(cropped_img_path, model_to_discard):
                         number += 1
+                        
                         paths.append(cropped_img_path)
+                        if (len(paths) == MAX_NUM_OF_CROPS):
+                            final = True
+                            break
                         info(f'Cropped image saved at: {cropped_img_path}')
                     else:
                         os.remove(cropped_img_path)
+            if final:
+                break
 
     except Exception as e:
         warning(f"Error processing image {src_img}: {str(e)}")
@@ -217,8 +223,7 @@ def crop_images(src_img: str, model_to_crop: YOLO , model_to_discard: YOLO, dele
             os.remove(src_img)
         else:
             paths.append(src_img)
-
-    return paths
+        return paths
 
 def download_image(url, full_path, max_retries=2, timeout=3):
     """download a image and save it
@@ -231,23 +236,27 @@ def download_image(url, full_path, max_retries=2, timeout=3):
     Returns:
         bool: true if download correct false if not
     """
-    response = None
-    
-    # # from conf import warning, info, fail
+    # from conf import warning, info, fail
     for attempt in range(max_retries):
         try:
             response = requests.get(url, timeout=timeout)
             if response.status_code == 200:
                 with open(full_path, 'wb') as file:
                     file.write(response.content)
+                with Image.open(full_path) as img:
+                    img.verify()
                 info(f"Image {full_path} correctly download")
                 return True
+        except (IOError, SyntaxError) as e:
+            warning(f"Invalid image file: {full_path}")
+            os.remove(full_path)
+            break
         except (RequestException, Timeout) as e:
             warning(f"URL error: {url} (attempt {attempt+1}/{max_retries}) - {str(e)}")
+        finally:
+            response.close()
             
     fail(f'Image with URL error: {url}, could not be download')
-    if response:
-        response.close()
     return False
 
 def train_yolo_model(model: YOLO, model_name, train_folder_path, model_folder,epochs):
@@ -264,25 +273,39 @@ def train_yolo_model(model: YOLO, model_name, train_folder_path, model_folder,ep
     if DEVICE == 'cpu':
         os.environ['OMP_NUM_THREADS'] = str(num_cores)
         torch.set_num_threads(num_cores)
+        cpu = True
     else:
         torch.cuda.set_device(0)
         torch.cuda.empty_cache()
         model.to(DEVICE)  
         info(f"Using GPU: {torch.cuda.get_device_name(0)}")
+        cpu = False
 
     
     try:
-        results = model.train(
-            data=train_folder_path,
-            epochs=epochs,
-            imgsz=IMAGE_SIZE,
-            name=model_name,
-            project=model_folder,
-            device=DEVICE,
-            amp=True,   
-            batch=BATCH,
-            workers=NUM_WORKERS
-        )
+        if cpu:
+            
+            results = model.train(
+                data=train_folder_path,
+                epochs=epochs,
+                imgsz=IMAGE_SIZE,
+                name=model_name,
+                project=model_folder,
+                batch=BATCH,
+                device=DEVICE
+            )
+        else:
+            results = model.train(
+                data=train_folder_path,
+                epochs=epochs,
+                imgsz=IMAGE_SIZE,
+                name=model_name,
+                project=model_folder,
+                device=DEVICE,
+                amp=True,   
+                batch=BATCH,
+                workers=NUM_WORKERS
+            )
         return results
     except RuntimeError as e:
         print(f"Error during training: {e}")

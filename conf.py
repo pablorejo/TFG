@@ -33,7 +33,7 @@ def info(text: str):
 
 def noti():
     # Asegurarse de que la ruta al archivo de sonido es correcta
-    sound_file = os.path.join(os.getcwd(), 'extras', 'noti.mp3')
+    sound_file = os.path.join('extras', 'noti.mp3')
     
     # Verificar si el archivo de sonido existe
     if os.path.exists(sound_file):
@@ -41,6 +41,9 @@ def noti():
             playsound(sound_file)
             info('Notification sound')
         except UnicodeDecodeError as e:
+            fail(f"Error UnicodeDecodeError playing sound: {e}")
+        
+        except Exception as e:
             fail(f"Error playing sound: {e}")
     else:
         warning(f"Sound file not found: {sound_file}")
@@ -65,7 +68,7 @@ def chek_model(model: str):
     if os.path.exists(model): 
         return YOLO(model)
     else:
-        warning(f"Discard model does not exist: {model}\nBad images will not be discarded")
+        warning(f"Model does not exist: {model}")
         return None
 
 def chek_folder(folder: str):
@@ -170,7 +173,7 @@ TAXONOMIC_RANKS = [
 VALIDATION_PERCENTAGE = 0.1
 TESTING_PERCENTAGE = 0.05
 TRAINING_PERCENTAGE = 1 - TESTING_PERCENTAGE - VALIDATION_PERCENTAGE
-MAX_NUM_OF_CROPS = 0 # In a image only crop 5 times
+MAX_NUM_OF_CROPS = 20 # In a image only crop 5 times
 # IMAGE_SAMPLE_COUNT = [
 #     5000,
 #     4000,
@@ -193,8 +196,10 @@ def total_image_per_cat(taxon_index):
 
 NUM_WORKERS = 8 # If use cuda for train number of process usees per gpu
 BATCH = 4 # Number of bathsize, increase ram use.
+BATCH = 16 # Number of bathsize, increase ram use.
+
 # IMAGE_SIZE = 1024
-IMAGE_SIZE = 30
+IMAGE_SIZE = 128
 # TRAIN_EPOCHS = [
 #     45,
 #     45,

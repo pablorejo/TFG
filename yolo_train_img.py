@@ -128,14 +128,15 @@ def process_image(
     if CHECK_IMAGES:
         with semaphore_models:
             not_discard = discard_bad_image(full_path,model_to_discard)
-
     if not_discard:
         number_of_transformations = TRANSFORMATIONS_PER_IMAGE
         total_transformations = None
         
         with semaphore_models:
-            paths = crop_images(src_img=full_path,model_to_crop=model_to_crop,model_to_discard=model_to_discard)
-        
+            if MAX_NUM_OF_CROPS != 0:
+                paths = crop_images(src_img=full_path,model_to_crop=model_to_crop,model_to_discard=model_to_discard)
+            else:
+                paths = [full_path]
         ## start crtitique section
         semaphore_values.acquire() 
         try:
@@ -306,10 +307,6 @@ def calculate_data_of_df(data_path: str,filter_colums=None, filters=None,print_b
     model_count_dict['total_lines'] = total_lines
     info(f"There are {total_lines} lines in this data frame")
     return model_count_dict
-    
-
-
-
 
 def initial_df_processing(df_occurrences, training, column_filters, filters,taxon_index):
     total_counts = {} # Contains a dictionary of the taxon name with the number of existing data points.
@@ -484,17 +481,27 @@ def filter_chunk_all(dfs,key,value,chunksize,size_chunk_list = NUMBER_OF_PROCESS
         
         
 
-def train_model(model, train_folder_path, model_name, start_time_func, execution_time_process_chunk, model_folder,taxon_index):
+def train_model(model, train_folder_path, model_name, start_time_func, execution_time_process_chunk, model_folder,taxon_index,counts_with_transformations_and_crops):
     start_time_train = time.time()
-    
-    results = train_yolo_model(
+    train_bool = True
+    min_value = 1
+    if len(counts_with_transformations_and_crops) > 1:
+        for value in counts_with_transformations_and_crops.values():
+            if value < min_value:
+                train_bool = False
+                break
+    else:
+        train_bool = False
+        
+    if train_bool:
+        results = train_yolo_model(
             model=model,
             model_name=model_name,
             train_folder_path=train_folder_path,
             model_folder=model_folder,
             epochs=TRAIN_EPOCHS[taxon_index]
         )
-    
+        
     end_time_func = time.time()
     execution_time_func = end_time_func - start_time_func
     execution_time_train = end_time_func - start_time_train
@@ -649,12 +656,9 @@ def train(
                         model_to_discart, 
                         model_to_crop,
                         key)
-                    
-                    
 
                     if total_image_per_cat(taxon_index) - counts_with_transformations_and_crops[key] <= 0:
                         break
-        
         
         del dfs
         # Increase images if needed
@@ -663,13 +667,10 @@ def train(
         if USE_PROCESS_TO_DOWNLOAD:
             manager.shutdown()
             manager.join()
-        
-    
     
     end_time_proces_chunk = time.time()
     
     model_name = os.path.split(model_folder)[-1]
-    
     
     info(MODEL_INIT)
     chek_folder(model_folder)
@@ -701,6 +702,7 @@ def train(
         if model == None:
             model = chek_model(MODEL_INIT)
         
+        
         # Train yolo bool    
         results = train_model(model, 
             train_folder_path, 
@@ -708,7 +710,8 @@ def train(
             start_time_func,
             execution_time_process_chunk,
             model_folder,
-            taxon_index)
+            taxon_index,
+            counts_with_transformations_and_crops)
         
         
         model_folder = os.path.dirname(results.save_dir) 
@@ -724,7 +727,7 @@ def train(
                         file.write(filter + ",")     
                 file.close()
 
-        path_to_model = os.path.join(model_folder,'weights','best.pt') 
+        path_to_model = os.path.join(results.save_dir,'weights','best.pt') 
         
         for key, _ in total_counts.items():
             if taxon_index < len(TAXONOMIC_RANKS) - 1:
@@ -809,7 +812,6 @@ if __name__ == "__main__":
             empty_folder(path)
 
         directories = get_directories(IMAGES_FOLDER)
-        train_folder(TAXONOMIC_RANKS[0][0], IMAGES_FOLDER)
         train_folder(TAXONOMIC_RANKS[0][0], IMAGES_FOLDER)
 
         for taxon, index in TAXONOMIC_RANKS:
