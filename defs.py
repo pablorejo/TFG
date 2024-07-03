@@ -141,7 +141,7 @@ def copy_to_training(folder_path,dest_path):
 
             Returns: true if there are images in the training folders
     """
-    
+    info('coping images to  traing folder')
     # from conf import warning, info, fail
     empty_folder(dest_path)  # Empty the training image folder
     folders = get_folders_by_level(folder_path, 1)

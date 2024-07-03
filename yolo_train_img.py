@@ -124,10 +124,12 @@ def process_image(
     if is_corrupt_image(full_path):
         return
     
-    with semaphore_models:
-        discard = discard_bad_image(full_path,model_to_discard)
+    not_discard = True
+    if CHECK_IMAGES:
+        with semaphore_models:
+            not_discard = discard_bad_image(full_path,model_to_discard)
 
-    if discard:
+    if not_discard:
         number_of_transformations = TRANSFORMATIONS_PER_IMAGE
         total_transformations = None
         
@@ -344,9 +346,8 @@ def no_more_images(counts: dict):
     return all(value >= total_image_per_cat(taxon_index) for value in counts.values())
 
 
-    
-def increase_images(counts_with_transformations_and_crops, taxon_index):
-    def increase_image_thread(image,total_images,valor,semaphore):
+
+def increase_image_thread(image,total_images,valor,semaphore,key):
         semaphore.acquire()
         if total_images.value > 0:
             while total_images.value < total_image_per_cat(taxon_index):
@@ -359,6 +360,7 @@ def increase_images(counts_with_transformations_and_crops, taxon_index):
             warning(f"No images found for class: {key}")
         semaphore.release()
         
+def increase_images(counts_with_transformations_and_crops, taxon_index):
     
     def increase_image_normal(image,total_images,valor):
         if total_images > 0:
@@ -367,8 +369,6 @@ def increase_images(counts_with_transformations_and_crops, taxon_index):
                 augment_image(image, valor)
         else:
             warning(f"No images found for class: {key}")
-        
-        
             
     def return_n_images(images,n_images):
         return_images = []
@@ -390,10 +390,11 @@ def increase_images(counts_with_transformations_and_crops, taxon_index):
             if USE_PROCESS_TO_AUMENT_IMG:
                 total_images = manager.Value('i',len(images))
                 semaphore = manager.Semaphore(1)
-                args = (total_images,value,semaphore)
+                
                 
                 with Pool(processes=NUMBER_OF_PROCESS) as pool_aument_images:
                     for images_chunk in return_n_images(images,NUMBER_OF_PROCESS*2):
+                        args = (total_images,value,semaphore,key)
                         args_aument = [(image, *args) for image in images_chunk]
                         pool_aument_images.starmap(increase_image_thread,args_aument)
                         with semaphore:
@@ -525,7 +526,8 @@ def train(
         resume = False,
         download_images_bool = True,
         save_context = None,
-        delete_previus_model = False
+        delete_previus_model = False,
+        key = None
     ):
 
     start_time_func = time.time()
@@ -550,7 +552,6 @@ def train(
         
     if download_images_bool:
         empty_folder(temp_image_path)  # Empty the temporary training image folder.
-    training = TAXONOMIC_RANKS[taxon_index]
     training = TAXONOMIC_RANKS[taxon_index]
     
     chunksize = 10**3
@@ -667,10 +668,8 @@ def train(
     
     end_time_proces_chunk = time.time()
     
-
-    # model_name = f"{initial_model_name}_{column_filters[-1]}_{filters[-1]}" if column_filters else initial_model_name
     model_name = os.path.split(model_folder)[-1]
-
+    
     
     info(MODEL_INIT)
     chek_folder(model_folder)
@@ -679,13 +678,6 @@ def train(
         if delete_previus_model and os.path.exists(model_folder):
             empty_folder(model_folder)
             os.rmdir(model_folder)
-        if delete_previus_model:
-            if os.path.exists(model_folder):
-                empty_folder(model_folder)
-                os.rmdir(model_folder)
-        
-            
-            
 
         info(f"""Using the following image counts
             Downloaded images: {initial_counts}
@@ -718,9 +710,8 @@ def train(
             model_folder,
             taxon_index)
         
-        model_folder = results.save_dir
         
-        model_folder = results.save_dir
+        model_folder = os.path.dirname(results.save_dir) 
     
         del model
 
@@ -734,12 +725,8 @@ def train(
                 file.close()
 
         path_to_model = os.path.join(model_folder,'weights','best.pt') 
-        second_loop = 0
         
         for key, _ in total_counts.items():
-            if taxon_index == 0 and second_loop == 1:
-                info("second loop")
-            
             if taxon_index < len(TAXONOMIC_RANKS) - 1:
                 next_column_filters = column_filters.copy()
                 next_filters = filters.copy()
@@ -747,11 +734,8 @@ def train(
                 traing_bool = True
                 if TAXONOMIC_RANKS[taxon_index] not in next_column_filters:
                     next_column_filters.append(TAXONOMIC_RANKS[taxon_index])
-                if TAXONOMIC_RANKS[taxon_index] not in next_column_filters:
-                    next_column_filters.append(TAXONOMIC_RANKS[taxon_index])
                     next_filters.append([key])
                 else:
-                    index_filter = next_column_filters.index(TAXONOMIC_RANKS[taxon_index])
                     index_filter = next_column_filters.index(TAXONOMIC_RANKS[taxon_index])
                     if key in next_filters[index_filter]:
                         next_filters[index_filter] = [key]
@@ -779,7 +763,6 @@ def train(
                 # Recursive training
                 if traing_bool:
                     next_model_folder = os.path.join(model_folder,f"{TAXONOMIC_RANKS[taxon_index]}_{key}")
-                    next_model_folder = os.path.join(model_folder,f"{TAXONOMIC_RANKS[taxon_index]}_{key}")
                     train(
                         model_folder=next_model_folder,
                         column_filters=next_column_filters,
@@ -792,7 +775,6 @@ def train(
 
             else:
                 info(f"Finished {column_filters} of {filters}")
-            second_loop = 1
     else:
         text = f"No data exists for these filters\n {column_filters}\n{filters}"
         chek_folder(model_folder)
@@ -839,28 +821,29 @@ if __name__ == "__main__":
     else:
         filter_colums=[
             TAXONOMIC_RANKS[0],
-            TAXONOMIC_RANKS[1],
-            TAXONOMIC_RANKS[2],
-            TAXONOMIC_RANKS[3],
-            TAXONOMIC_RANKS[4]
+            # TAXONOMIC_RANKS[1],
+            # TAXONOMIC_RANKS[2],
+            # TAXONOMIC_RANKS[3],
+            # TAXONOMIC_RANKS[4]
             ]
         
         filters=[
             ['Gastropoda', 'Bivalvia', 'Cephalopoda', 'Polyplacophora'],
-            ['Seguenziida', 'Ellobiida', 'Runcinida', 'Neogastropoda', 'Siphonariida', 'Trochida', 'Pleurotomariida', 'Umbraculida', 'Cyrtoneritida', 'Lepetellida', 'Aplysiida', 'Pteropoda', 'Littorinimorpha', 'Neomphalida', 'Pleurobranchida', 'Systellommatophora', 'Architaenioglossa', 'Cephalaspidea', 'Stylommatophora', 'Cycloneritida', 'Cocculinida', 'Nudibranchia'],
-            ['Helicarionidae', 'Euconulidae', 'Clausiliidae', 'Cochlicopidae', 'Draparnaudiidae', 'Endodontidae', 'Bothriembryontidae', 'Spelaeoconchidae', 'Pleurodiscidae', 'Pristilomatidae', 'Spelaeodiscidae', 'Pagodulinidae', 'Epirobiidae', 'Oreohelicidae', 'Epiphragmophoridae', 'Gastrodontidae', 'Sphincterochilidae', 'Valloniidae', 'Helicidae', 'Dorcasiidae', 'Cerionidae', 'Vertiginidae', 'Xanthonychidae', 'Ariophantidae', 'Lauriidae', 'Grandipatulidae', 'Fauxulidae', 'Spiraxidae', 'Megomphicidae', 'Archaeozonitidae', 'Oopeltidae', 'Eucalodiidae', 'Philomycidae', 'Orthalicidae', 'Elonidae', 'Canariellidae', 'Sagdidae', 'Subulinidae', 'Charopidae', 'Zachrysiidae', 'Pyramidulidae', 'Chondrinidae', 'Filholiidae', 'Hygromiidae', 'Helicodiscidae', 'Scolodontidae', 'Thysanophoridae', 'Polygyridae', 'Haplotrematidae', 'Diapheridae', 'Amastridae', 'Cylindrellinidae', 'Urocoptidae', 'Vitrinidae', 'Limacidae', 'Acavidae', 'Discidae', 'Orculidae', 'Chronidae', 'Ferussaciidae', 'Microcystidae', 'Zonitidae', 'Simpulopsidae', 'Megaspiridae', 'Achatinidae', 'Agriolimacidae', 'Helicodontidae', 'Pleurodontidae', 'Ariolimacidae', 'Dyakiidae', 'Argnidae', 'Milacidae', 'Succineidae', 'Bulimulidae', 'Boettgerillidae', 'Agardhiellidae', 'Azecidae', 'Achatinellidae', 'Holospiridae', 'Oxychilidae', 'Strobilopsidae', 'Cerastidae', 'Trissexodontidae', 'Macrocyclidae', 'Binneyidae', 'Anadenidae', 'Trochomorphidae', 'Athoracophoridae', 'Truncatellinidae', 'Palaeoxestinidae', 'Caryodidae', 'Odontocycladidae', 'Palaeostoidae', 'Testacellidae', 'Punctidae', 'Enidae', 'Oleacinidae', 'Plectopylidae', 'Geomitridae', 'Camaenidae', 'Parmacellidae', 'Gastrocoptidae', 'Cystopeltidae', 'Strophocheilidae', 'Odontostomidae', 'Amphibulimidae', 'Trichodiscinidae', 'Anadromidae', 'Partulidae', 'Rhytididae', 'Cepolidae', 'Solaropsidae', 'Streptaxidae', 'Clavatoridae', 'Pupillidae', 'Vidaliellidae', 'Arionidae', 'Urocyclidae', 'Labyrinthidae'],
-            ['Vidovicia', 'Cattania', 'Palaeotachea', 'Pseudotachea', 'Dinarica', 'Hemicycla', 'Rossmaessleria', 'Chilostoma', 'Isognomostoma', 'Cepaea', 'Causa', 'Levantina', 'Megalotachea', 'Alabastrina', 'Cantareus', 'Kollarix', 'Mesodontopsis', 'Theba', 'Iberus', 'Lindholmia', 'Thiessea', 'Gyrostomella', 'Iberellus', 'Neocrassa', 'Isaurica', 'Campylaea', 'Cornu', 'Kosicia', 'Tartessiberus', 'Parachloraea', 'Pseudoklikia', 'Otala', 'Massylaea', 'Lampadia', 'Helicigona', 'Liburnica', 'Cylindrus', 'Amanica', 'Allognathus', 'Pseudotrizona', 'Caucasotachea', 'Faustina', 'Loxana', 'Corneola', 'Arianta', 'Campylaeopsis', 'Tyrrheniberus', 'Delphinatia', 'Codringtonia', 'Tacheocampylaea', 'Paradrobacia', 'Josephinella', 'Helix', 'Marmorana', 'Discula', 'Macularia', 'Eobania', 'Drobacia', 'Eremina'],
-            ['Cornu Born, 1778', 'Cornu mazzullii (De Cristofori & Jan, 1832)', 'Cornu cephalaeditana (Giannuzzi-Savelli, Sparacio & Oliva, 1986)', 'Cornu insolida (Monterosato, 1892)', 'Cornu aspersum (O.F.Müller, 1774)']
+            # ['Seguenziida', 'Ellobiida', 'Runcinida', 'Neogastropoda', 'Siphonariida', 'Trochida', 'Pleurotomariida', 'Umbraculida', 'Cyrtoneritida', 'Lepetellida', 'Aplysiida', 'Pteropoda', 'Littorinimorpha', 'Neomphalida', 'Pleurobranchida', 'Systellommatophora', 'Architaenioglossa', 'Cephalaspidea', 'Stylommatophora', 'Cycloneritida', 'Cocculinida', 'Nudibranchia'],
+            # ['Helicarionidae', 'Euconulidae', 'Clausiliidae', 'Cochlicopidae', 'Draparnaudiidae', 'Endodontidae', 'Bothriembryontidae', 'Spelaeoconchidae', 'Pleurodiscidae', 'Pristilomatidae', 'Spelaeodiscidae', 'Pagodulinidae', 'Epirobiidae', 'Oreohelicidae', 'Epiphragmophoridae', 'Gastrodontidae', 'Sphincterochilidae', 'Valloniidae', 'Helicidae', 'Dorcasiidae', 'Cerionidae', 'Vertiginidae', 'Xanthonychidae', 'Ariophantidae', 'Lauriidae', 'Grandipatulidae', 'Fauxulidae', 'Spiraxidae', 'Megomphicidae', 'Archaeozonitidae', 'Oopeltidae', 'Eucalodiidae', 'Philomycidae', 'Orthalicidae', 'Elonidae', 'Canariellidae', 'Sagdidae', 'Subulinidae', 'Charopidae', 'Zachrysiidae', 'Pyramidulidae', 'Chondrinidae', 'Filholiidae', 'Hygromiidae', 'Helicodiscidae', 'Scolodontidae', 'Thysanophoridae', 'Polygyridae', 'Haplotrematidae', 'Diapheridae', 'Amastridae', 'Cylindrellinidae', 'Urocoptidae', 'Vitrinidae', 'Limacidae', 'Acavidae', 'Discidae', 'Orculidae', 'Chronidae', 'Ferussaciidae', 'Microcystidae', 'Zonitidae', 'Simpulopsidae', 'Megaspiridae', 'Achatinidae', 'Agriolimacidae', 'Helicodontidae', 'Pleurodontidae', 'Ariolimacidae', 'Dyakiidae', 'Argnidae', 'Milacidae', 'Succineidae', 'Bulimulidae', 'Boettgerillidae', 'Agardhiellidae', 'Azecidae', 'Achatinellidae', 'Holospiridae', 'Oxychilidae', 'Strobilopsidae', 'Cerastidae', 'Trissexodontidae', 'Macrocyclidae', 'Binneyidae', 'Anadenidae', 'Trochomorphidae', 'Athoracophoridae', 'Truncatellinidae', 'Palaeoxestinidae', 'Caryodidae', 'Odontocycladidae', 'Palaeostoidae', 'Testacellidae', 'Punctidae', 'Enidae', 'Oleacinidae', 'Plectopylidae', 'Geomitridae', 'Camaenidae', 'Parmacellidae', 'Gastrocoptidae', 'Cystopeltidae', 'Strophocheilidae', 'Odontostomidae', 'Amphibulimidae', 'Trichodiscinidae', 'Anadromidae', 'Partulidae', 'Rhytididae', 'Cepolidae', 'Solaropsidae', 'Streptaxidae', 'Clavatoridae', 'Pupillidae', 'Vidaliellidae', 'Arionidae', 'Urocyclidae', 'Labyrinthidae'],
+            # ['Vidovicia', 'Cattania', 'Palaeotachea', 'Pseudotachea', 'Dinarica', 'Hemicycla', 'Rossmaessleria', 'Chilostoma', 'Isognomostoma', 'Cepaea', 'Causa', 'Levantina', 'Megalotachea', 'Alabastrina', 'Cantareus', 'Kollarix', 'Mesodontopsis', 'Theba', 'Iberus', 'Lindholmia', 'Thiessea', 'Gyrostomella', 'Iberellus', 'Neocrassa', 'Isaurica', 'Campylaea', 'Cornu', 'Kosicia', 'Tartessiberus', 'Parachloraea', 'Pseudoklikia', 'Otala', 'Massylaea', 'Lampadia', 'Helicigona', 'Liburnica', 'Cylindrus', 'Amanica', 'Allognathus', 'Pseudotrizona', 'Caucasotachea', 'Faustina', 'Loxana', 'Corneola', 'Arianta', 'Campylaeopsis', 'Tyrrheniberus', 'Delphinatia', 'Codringtonia', 'Tacheocampylaea', 'Paradrobacia', 'Josephinella', 'Helix', 'Marmorana', 'Discula', 'Macularia', 'Eobania', 'Drobacia', 'Eremina'],
+            # ['Cornu Born, 1778', 'Cornu mazzullii (De Cristofori & Jan, 1832)', 'Cornu cephalaeditana (Giannuzzi-Savelli, Sparacio & Oliva, 1986)', 'Cornu insolida (Monterosato, 1892)', 'Cornu aspersum (O.F.Müller, 1774)']
             ]
         
         taxon_index = 0
         # calculate_data_of_df(PROCESSED_DATA_CSV,filter_colums=filter_colums,filters=filters,print_bool=True)
+        model_folder= os.path.join(PATH_MODELS_TRAINED,"model_g",f"{TAXONOMIC_RANKS[0]}_Gastropoda",f"{TAXONOMIC_RANKS[1]}_Stylommatophora")
         train(
             column_filters=filter_colums,
             filters=filters,
             taxon_index=taxon_index,
             train_folder_path=TRAINING_DEST_PATH,
             download_images_bool=True,
-            delete_previus_model=False
+            delete_previus_model=False,
         )
 
