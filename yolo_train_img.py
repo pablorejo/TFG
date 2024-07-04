@@ -498,7 +498,6 @@ def train_model(model, train_folder_path, model_name, start_time_func, execution
 
     
     results = None
-    model_folder = ''
     if train_bool:
         results = train_yolo_model(
             model=model,
@@ -733,18 +732,16 @@ def train(
 
         # If we reach the species identification step, the taxonomic rank will be the last in the list. Save the filter list to a txt file for result analysis.
         if TAXONOMIC_RANKS[taxon_index] == TAXONOMIC_RANKS[-1]:
-            with open(os.path.join(model_folder,'data.txt'), 'w') as file:
+            with open(os.path.join(results.save_dir,'data.txt'), 'w') as file:
                 for filter_item in filters:
                     for filter in filter_item:
                         file.write(filter + ",")     
                 file.close()
         if taxon_index == len(TAXONOMIC_RANKS):
-            with open(os.path.join(model_folder,'data.txt'), 'wa') as file:
+            with open(os.path.join(results.save_dir,'data.txt'), 'wa') as file:
                 file.write('especies: ')
                 for specie in counts_with_transformations_and_crops.keys():
                     file.write(specie)
-                    
-
         
         if results != None:
             path_to_model = os.path.join(results.save_dir,'weights','best.pt') 
@@ -869,6 +866,6 @@ if __name__ == "__main__":
             taxon_index=taxon_index,
             train_folder_path=TRAINING_DEST_PATH,
             download_images_bool=True,
-            delete_previus_model=True,
+            delete_previus_model=False,
         )
 
