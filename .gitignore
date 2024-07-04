@@ -22,3 +22,5 @@ train_configurations/model_g.yaml
 discard_images
 yolov8n.pt
 train_configurations
+genus*
+*.txt

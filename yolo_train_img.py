@@ -483,16 +483,22 @@ def filter_chunk_all(dfs,key,value,chunksize,size_chunk_list = NUMBER_OF_PROCESS
 
 def train_model(model, train_folder_path, model_name, start_time_func, execution_time_process_chunk, model_folder,taxon_index,counts_with_transformations_and_crops):
     start_time_train = time.time()
-    train_bool = True
+    train_bool = False
     min_value = 1
+    min_cat = 2
     if len(counts_with_transformations_and_crops) > 1:
+        print(counts_with_transformations_and_crops)
         for value in counts_with_transformations_and_crops.values():
-            if value < min_value:
-                train_bool = False
-                break
-    else:
-        train_bool = False
-        
+            print(value)
+            if value > min_value:
+                min_cat -= 1
+                if min_cat == 0:
+                    train_bool = True
+                    break
+
+    
+    results = None
+    model_folder = ''
     if train_bool:
         results = train_yolo_model(
             model=model,
@@ -501,12 +507,21 @@ def train_model(model, train_folder_path, model_name, start_time_func, execution
             model_folder=model_folder,
             epochs=TRAIN_EPOCHS[taxon_index]
         )
+        model_folder = os.path.dirname(results.save_dir) 
+    else:
+        path = os.path.join(model_folder,model_name)
+        model_folder = path
+        if not os.path.exists(path):
+            os.mkdir(path)
+        with open(os.path.join(path,'data_path.txt'),'w') as file:
+            file.write('only one category')
+        
         
     end_time_func = time.time()
     execution_time_func = end_time_func - start_time_func
     execution_time_train = end_time_func - start_time_train
     save_information(model_folder, execution_time_func, execution_time_train, execution_time_process_chunk)
-    return results
+    return results,model_folder
     
 def save_information(model_folder,execution_time_func,execution_time_train,execution_time_process_chunk):
     noti()
@@ -704,7 +719,7 @@ def train(
         
         
         # Train yolo bool    
-        results = train_model(model, 
+        results,model_folder = train_model(model, 
             train_folder_path, 
             model_name,
             start_time_func,
@@ -713,9 +728,6 @@ def train(
             taxon_index,
             counts_with_transformations_and_crops)
         
-        
-        model_folder = os.path.dirname(results.save_dir) 
-    
         del model
 
 
@@ -726,9 +738,20 @@ def train(
                     for filter in filter_item:
                         file.write(filter + ",")     
                 file.close()
+        if taxon_index == len(TAXONOMIC_RANKS):
+            with open(os.path.join(model_folder,'data.txt'), 'wa') as file:
+                file.write('especies: ')
+                for specie in counts_with_transformations_and_crops.keys():
+                    file.write(specie)
+                    
 
-        path_to_model = os.path.join(results.save_dir,'weights','best.pt') 
         
+        if results != None:
+            path_to_model = os.path.join(results.save_dir,'weights','best.pt') 
+        else:
+            path_to_model = path_model_to_train
+            
+            
         for key, _ in total_counts.items():
             if taxon_index < len(TAXONOMIC_RANKS) - 1:
                 next_column_filters = column_filters.copy()
@@ -846,6 +869,6 @@ if __name__ == "__main__":
             taxon_index=taxon_index,
             train_folder_path=TRAINING_DEST_PATH,
             download_images_bool=True,
-            delete_previus_model=False,
+            delete_previus_model=True,
         )
 
