@@ -9,32 +9,41 @@ from ultralytics import YOLO
 from PIL import Image, UnidentifiedImageError
 from multiprocessing import cpu_count
 
+
 def improve_contrast(image):
+    # Convert image to LAB color space
     lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
     l, a, b = cv2.split(lab)
+
+    # Apply CLAHE to the L-channel
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
     cl = clahe.apply(l)
+
+    # Merge the CLAHE enhanced L-channel back with a and b channels
     limg = cv2.merge((cl, a, b))
+
+    # Convert image back to BGR color space
     return cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+
+
 
 def denoise_image(image):
     return cv2.GaussianBlur(image, (5, 5), 0)
 
 def augment_image(image_path: str, number: int):
-    # from conf import IMAGE_SIZE, warning
     # Define an augmentation sequence
     augmentation_sequence = iaa.Sequential([
         iaa.Fliplr(0.5),  # Horizontal flip with 50% probability
         iaa.Crop(percent=(0, 0.1)),  # Crop the images between 0% to 10%
         iaa.GaussianBlur(sigma=(0, 3.0)),  # Apply Gaussian blur with sigma between 0 and 3.0
-        iaa.Multiply((0.8, 1.2)),  # Change the brightness of images by multiplying values between 0.8 and 1.2
+        iaa.Multiply((0.8, 1.2)),  # Change brightness by multiplying values between 0.8 and 1.2
         iaa.Affine(
-            scale={"x": (0.8, 1.2), "y": (0.8, 1.2)},  # Scale images on the x and y axis between 80% and 120%
-            translate_percent={"x": (-0.2, 0.2), "y": (-0.2, 0.2)},  # Translate images on the x and y axis between -20% and 20%
+            scale={"x": (0.8, 1.2), "y": (0.8, 1.2)},  # Scale on x and y axis between 80% and 120%
+            translate_percent={"x": (-0.2, 0.2), "y": (-0.2, 0.2)},  # Translate on x and y axis between -20% and 20%
             rotate=(-25, 25),  # Rotate images between -25 and 25 degrees
-            shear=(-8, 8)  # Apply shear to images between -8 and 8 degrees
+            shear=(-8, 8)  # Apply shear between -8 and 8 degrees
         )
-    ], random_order=True)  # Apply the augmentations in random order
+    ], random_order=True)  # Apply augmentations in random order
 
     # Load the image
     image_in = cv2.imread(image_path)
@@ -42,20 +51,22 @@ def augment_image(image_path: str, number: int):
     if image_in is None:
         warning(f"Could not load image from path: {image_path}")
         return
-    
+
+    # Denoise and improve contrast
     image_denoise = denoise_image(image_in)
     image_contrast = improve_contrast(image_denoise)
-    image = cv2.cvtColor(image_contrast, cv2.COLOR_BGR2RGB)  # Convert from BGR to RGB for Matplotlib
+    image = cv2.cvtColor(image_contrast, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
 
-    # Apply the data augmentations
+    # Apply the augmentations
     image_aug = augmentation_sequence(image=image)
 
-    # Resize the image to 640x640
+    # Resize the image to the defined size
     image_aug_resized = cv2.resize(image_aug, (IMAGE_SIZE, IMAGE_SIZE))
 
-    image_path_out = image_path.replace(".webp", f"_{number}.webp")
     # Save the augmented image
+    image_path_out = image_path.replace(".webp", f"_{number}.webp")
     imageio.imwrite(image_path_out, image_aug_resized)
+
     return image_path_out
  
 def convert_to_webp(input_image_path: str, output_image_path="", quality=100, remove_original=True, only_rescale=False):
@@ -68,9 +79,13 @@ def convert_to_webp(input_image_path: str, output_image_path="", quality=100, re
     quality (int): The quality of the resulting image, from 1 to 100.
     remove_original (bool): Whether to delete the original image after conversion.
     only_rescale (bool): Whether to only resize the image without saving it in WebP format.
+    
+    Returns:
+    str: The path to the converted image.
     """
-    if output_image_path == "":
+    if not output_image_path:
         output_image_path = input_image_path.rsplit(".", 1)[0] + ".webp"
+
     try:
         with Image.open(input_image_path) as image:
             img_adjusted = image.resize((IMAGE_SIZE, IMAGE_SIZE), Image.LANCZOS)
@@ -88,6 +103,7 @@ def convert_to_webp(input_image_path: str, output_image_path="", quality=100, re
         warning(f"File not found: {input_image_path}")
     except Exception as e:
         warning(f"An exception occurred with the image: {input_image_path}\nError: {e}")
+
     return output_image_path
 
 def is_corrupt_image(image_path):
@@ -107,20 +123,21 @@ def is_corrupt_image(image_path):
     except UnidentifiedImageError:
         return True  # The image is corrupt or not an identifiable format
     except Exception as e:
-        # Log the exception if necessary
-        fail(f"Unexpected error checking image: {e} set corrupt true")
+        fail(f"Unexpected error checking image {image_path}: {e}, setting corrupt to True")
         return True
 
-def discard_bad_image(img_path,model_to_discard, ask=False, confidence=0.90):
-    """Discards images that are not useful for the project according to the model already trained by YOLO
-    
+def discard_bad_image(img_path, model_to_discard, ask=False, confidence=0.90):
+    """
+    Discards images that are not useful for the project according to the model already trained by YOLO.
+
     Args:
-    img_path: The path to the image to predict
-    ask: Whether to ask if confidence is less than 85%, default is False
-    confidence: The confidence level you want the model to have between (0,1), default is 0.85
-    
-    Returns: True if the image is good, False if it is bad or not a file"""
-    # from conf import types, info, warning, fail, VERBOSE
+    img_path (str): The path to the image to predict.
+    ask (bool): Whether to ask if confidence is less than 85%, default is False.
+    confidence (float): The confidence level you want the model to have between (0, 1), default is 0.90.
+
+    Returns:
+    bool: True if the image is good, False if it is bad or not a file.
+    """
     try:
         # Make a prediction on the image
         results = model_to_discard.predict(img_path, verbose=VERBOSE, device='cpu')
@@ -136,8 +153,8 @@ def discard_bad_image(img_path,model_to_discard, ask=False, confidence=0.90):
                         with Image.open(img_path) as image:
                             image.show()
                             print(f"Most probable class: {result.names[top1_class_index]} with confidence {top1_confidence}\n")
-                            response = input('Do you want to delete the image? (y/n)\n')
-                            if response.lower() == 'y':
+                            response = input('Do you want to delete the image? (y/n)\n').lower()
+                            if response == 'y':
                                 os.remove(img_path)
                                 info("You indicated the image is bad")
                                 return False
@@ -155,23 +172,25 @@ def discard_bad_image(img_path,model_to_discard, ask=False, confidence=0.90):
                 info("The image is good")
                 return True
     except NameError as e:
-        warning(f"The discard model does not exist, so return true: {e}")
+        warning(f"The discard model does not exist, so returning true: {e}")
         return True
     except Exception as e:
-        warning(f"{e}")
+        warning(f"Unexpected error: {e}")
         return True
 
-def crop_images(src_img: str, model_to_crop: YOLO , model_to_discard: YOLO, delete_original: bool = True):
+def crop_images(src_img: str, model_to_crop: YOLO, model_to_discard: YOLO, delete_original: bool = True):
     """
-    This function crops images based on an AI model.
-    
+    Crops images based on an AI model.
+
     Args:
-    src_img: Path to the image.
-    model: Model for detection.
-    
-    Returns: An array with the paths of the cropped images.
+    src_img (str): Path to the image.
+    model_to_crop (YOLO): Model for detection.
+    model_to_discard (YOLO): Model to discard bad images.
+    delete_original (bool): Whether to delete the original image after cropping.
+
+    Returns:
+    list: An array with the paths of the cropped images.
     """
-    # from conf import DETECT_MODEL_PATH,chek_model, info, warning, fail,VERBOSE
     image = cv2.imread(src_img)
     if image is None:
         info(f"Error reading image: {src_img}")
@@ -182,35 +201,26 @@ def crop_images(src_img: str, model_to_crop: YOLO , model_to_discard: YOLO, dele
         base_name, _ = os.path.splitext(src_img)
         number = 0
         paths = []
-        final = False
+
         for result in results:
-            # Get all bounding boxes
             boxes = result.boxes
 
             for box in boxes:
                 if bool(box.conf > 0.8):
-                    # Extract the bounding box coordinates, converted to integers
                     x_min, y_min, x_max, y_max = map(int, box.xyxy[0])
-                    
-                    # Crop the image using the coordinates
                     cropped_img = image[y_min:y_max, x_min:x_max]
-
-                    # Save the cropped image
                     cropped_img_path = f'{base_name}_cropped_{number}.jpg'
                     cv2.imwrite(cropped_img_path, cropped_img)
 
-                    
                     if discard_bad_image(cropped_img_path, model_to_discard):
-                        number += 1
-                        
                         paths.append(cropped_img_path)
-                        if (len(paths) == MAX_NUM_OF_CROPS):
-                            final = True
-                            break
+                        number += 1
                         info(f'Cropped image saved at: {cropped_img_path}')
+                        if len(paths) == MAX_NUM_OF_CROPS:
+                            break
                     else:
                         os.remove(cropped_img_path)
-            if final:
+            if len(paths) == MAX_NUM_OF_CROPS:
                 break
 
     except Exception as e:
@@ -218,25 +228,26 @@ def crop_images(src_img: str, model_to_crop: YOLO , model_to_discard: YOLO, dele
         return []
 
     finally:
-        del image
         if delete_original:
             os.remove(src_img)
         else:
             paths.append(src_img)
-        return paths
 
-def download_image(url, full_path, max_retries=2, timeout=3):
-    """download a image and save it
+    return paths
+
+def download_image(url, full_path, max_retries=3, timeout=5):
+    """
+    Download an image and save it.
+
     Args:
-        url (str): url to img to download
-        full_path (str): path where you want to save the image
-        max_retries (int, optional): times that def will try to download. Defaults to 3.
-        timeout (int, optional): tiem that download will wait for download . Defaults to 5.
+        url (str): URL to the image to download.
+        full_path (str): Path where the image will be saved.
+        max_retries (int, optional): Number of times to retry the download. Defaults to 3.
+        timeout (int, optional): Time to wait for the download in seconds. Defaults to 5.
 
     Returns:
-        bool: true if download correct false if not
+        bool: True if download was successful, False otherwise.
     """
-    # from conf import warning, info, fail
     for attempt in range(max_retries):
         try:
             response = requests.get(url, timeout=timeout)
@@ -245,67 +256,65 @@ def download_image(url, full_path, max_retries=2, timeout=3):
                     file.write(response.content)
                 with Image.open(full_path) as img:
                     img.verify()
-                info(f"Image {full_path} correctly download")
+                info(f"Image {full_path} downloaded correctly")
                 return True
         except (IOError, SyntaxError) as e:
             warning(f"Invalid image file: {full_path}")
-            os.remove(full_path)
+            if os.path.exists(full_path):
+                os.remove(full_path)
             break
         except (RequestException, Timeout) as e:
             warning(f"URL error: {url} (attempt {attempt+1}/{max_retries}) - {str(e)}")
         finally:
-            response.close()
-            
-    fail(f'Image with URL error: {url}, could not be download')
+            if 'response' in locals():
+                response.close()
+    
+    fail(f"Image with URL error: {url}, could not be downloaded")
     return False
 
-def train_yolo_model(model: YOLO, model_name, train_folder_path, model_folder,epochs):
-    info(f"{model_name} {train_folder_path} {model_folder}")
-    """this def train a model based on configurations sets in conf.py and parameters recevied
+def train_yolo_model(model, model_name, train_folder_path, model_folder, epochs):
+    """
+    Train a YOLO model based on configurations set in conf.py and parameters received.
 
     Args:
-        model_name (str): name where you want to sabe model
-        train_folder_path (str): path where you have training images to train the model
-        model_folder (_type_): path where you want to save de results of train
-    """
-    num_cores = cpu_count()
+        model (YOLO): The YOLO model to train.
+        model_name (str): Name to save the model.
+        train_folder_path (str): Path where training images are located.
+        model_folder (str): Path where training results will be saved.
+        epochs (int): Number of training epochs.
 
-    if DEVICE == 'cpu':
+    Returns:
+        results: Training results.
+    """
+    info(f"Starting training: {model_name} {train_folder_path} {model_folder}")
+    
+    num_cores = cpu_count()
+    device = DEVICE  # Ensure DEVICE is set properly, you may need to import or define this
+
+    if device == 'cpu':
         os.environ['OMP_NUM_THREADS'] = str(num_cores)
         torch.set_num_threads(num_cores)
-        cpu = True
+        model.to('cpu')
+        info("Using CPU for training")
     else:
         torch.cuda.set_device(0)
         torch.cuda.empty_cache()
-        model.to(DEVICE)  
+        model.to(device)
         info(f"Using GPU: {torch.cuda.get_device_name(0)}")
-        cpu = False
 
-    
     try:
-        if cpu:
-            
-            results = model.train(
-                data=train_folder_path,
-                epochs=epochs,
-                imgsz=IMAGE_SIZE,
-                name=model_name,
-                project=model_folder,
-                batch=BATCH,
-                device=DEVICE
-            )
-        else:
-            results = model.train(
-                data=train_folder_path,
-                epochs=epochs,
-                imgsz=IMAGE_SIZE,
-                name=model_name,
-                project=model_folder,
-                device=DEVICE,
-                amp=True,   
-                batch=BATCH,
-                workers=NUM_WORKERS
-            )
+        results = model.train(
+            data=train_folder_path,
+            epochs=epochs,
+            imgsz=IMAGE_SIZE,  # Ensure IMAGE_SIZE is defined
+            name=model_name,
+            project=model_folder,
+            batch=BATCH,  # Ensure BATCH is defined
+            device=device,
+            amp=(device != 'cpu'),  # Automatic Mixed Precision (AMP) only for GPU
+            workers=NUM_WORKERS  # Ensure NUM_WORKERS is defined
+        )
         return results
     except RuntimeError as e:
-        print(f"Error during training: {e}")
+        info(f"Error during training: {e}")
+        return None
