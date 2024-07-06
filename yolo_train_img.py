@@ -508,6 +508,9 @@ def train_model(model, train_folder_path, model_name, start_time_func, execution
         )
         model_folder = os.path.dirname(results.save_dir) 
     else:
+        if not os.path.exists(model_folder):
+            os.mkdir(model_folder)
+            
         path = os.path.join(model_folder,model_name)
         model_folder = path
         if not os.path.exists(path):
