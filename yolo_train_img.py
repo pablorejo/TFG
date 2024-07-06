@@ -732,16 +732,18 @@ def train(
 
         # If we reach the species identification step, the taxonomic rank will be the last in the list. Save the filter list to a txt file for result analysis.
         if TAXONOMIC_RANKS[taxon_index] == TAXONOMIC_RANKS[-1]:
-            with open(os.path.join(results.save_dir,'data.txt'), 'w') as file:
+            if results != None:
+                path = results.save_dir
+            else:
+                path = train_folder_path
+            with open(os.path.join(path,'data.txt'), 'w') as file:
                 for filter_item in filters:
                     for filter in filter_item:
-                        file.write(filter + ",")     
-                file.close()
-        if taxon_index == len(TAXONOMIC_RANKS):
-            with open(os.path.join(results.save_dir,'data.txt'), 'wa') as file:
+                        file.write(filter + ",")  
                 file.write('especies: ')
                 for specie in counts_with_transformations_and_crops.keys():
-                    file.write(specie)
+                    file.write(specie)   
+                
         
         if results != None:
             path_to_model = os.path.join(results.save_dir,'weights','best.pt') 
