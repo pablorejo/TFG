@@ -587,12 +587,14 @@ def train(
         # delete categories who dont have de minimun of image per sample.
         total_counts_correct = {}
         initial_counts = {}
+        new_initial_counts = {}
         for key,value in total_counts.items():
             if value > (total_image_per_cat(taxon_index) * MIN_SAMPLE_PER_CATEGORY):
-                initial_counts[key] = 0
+                new_initial_counts[key] = 0
                 total_counts_correct[key] = value
+        initial_counts = new_initial_counts.copy()
         total_counts = total_counts_correct.copy()
-        del total_counts_correct
+        del total_counts_correct,new_initial_counts
         
         
         if USE_PROCESS_TO_DOWNLOAD:
@@ -868,6 +870,6 @@ if __name__ == "__main__":
             taxon_index=taxon_index,
             train_folder_path=TRAINING_DEST_PATH,
             download_images_bool=True,
-            delete_previus_model=False,
+            delete_previus_model=True,
         )
 

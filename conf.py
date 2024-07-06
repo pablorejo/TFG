@@ -217,7 +217,6 @@ TRAIN_EPOCHS = [
 
 CONF_TOP_5 = 0.9 # Conf to discard model if conf is less than this de image is bad.
 PRIORITY = -10  # Sets the priority of processes in the system; requires running as sudo negative num more priority
-
 USE_THREADS_TO_DOWNLOAD = True # If you want download data with threads (quickly) set it True if you want sequence set it False
 MAX_THREADS_DOWNLOADING_PER_PROCESS = 10
 USE_PROCESS_TO_DOWNLOAD = False
