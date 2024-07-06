@@ -1,14 +1,25 @@
-from conf import *
+from conf import (
+    VERBOSE,
+    info,
+    warning,
+    fail,
+    IMAGE_SIZE,
+    types,
+    MAX_NUM_OF_CROPS,
+    DEVICE,
+    BATCH,
+    NUM_WORKERS
+)
+import torch
 import cv2
 from imgaug import augmenters as iaa
 import imageio
-import time
 import requests
 from requests.exceptions import RequestException, Timeout
 from ultralytics import YOLO
 from PIL import Image, UnidentifiedImageError
 from multiprocessing import cpu_count
-
+import os
 
 def improve_contrast(image):
     # Convert image to LAB color space

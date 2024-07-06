@@ -1,12 +1,26 @@
+from conf import (
+    info,
+    warning,
+    fail,
+    TRAINING_DEST_PATH,
+    DETECTION_IMAGE_PATH,
+    TRAINING_DETECT_DEST_PATH,
+    VALIDATION_PERCENTAGE,
+    TESTING_PERCENTAGE,
+    training_detect_data_path,
+    TRAINING_PERCENTAGE,
+    USE_PROCESS_TO_COPI_IMG,
+    NUMBER_OF_PROCESS_TO_COPY,
+    training_data_path,
+)
 import os
-import platform
 import random
 import shutil  # To copy images to the training folder
 import math
 import pandas as pd
-from conf import *
-from multiprocessing import Pool, Process
+from multiprocessing import Pool
 from threading import Thread,Semaphore
+
 def parse_name(name):
     """
     Processes the string so it can be a valid file name.

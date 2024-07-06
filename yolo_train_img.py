@@ -1,15 +1,66 @@
-from conf import *
+from conf import (
+    info,
+    fail,
+    warning,
+    total_image_per_cat,
+    chek_model,
+    chek_folder,
+    noti,
+    CHECK_IMAGES,
+    TRANSFORMATIONS_PER_IMAGE,
+    MAX_NUM_OF_CROPS,
+    MAX_THREADS_DOWNLOADING_PER_PROCESS,
+    USE_THREADS_TO_DOWNLOAD,
+    TAXONOMIC_RANKS,
+    TEMP_IMAGE_PATH,
+    USE_PROCESS_TO_AUMENT_IMG,
+    NUMBER_OF_PROCESS,
+    TRAIN_EPOCHS,
+    PATH_MODELS_TRAINED,
+    MODEL_INIT,
+    TRAINING_DEST_PATH,
+    PROCESSED_DATA_CSV,
+    USE_PROCESS_TO_DOWNLOAD,
+    MIN_SAMPLE_PER_CATEGORY,
+    DISCARD_MODEL_PATH,
+    SHUFFLE_DATAFRAME,
+    DETECT_MODEL_PATH,
+    IMAGE_SIZE,
+    TRAIN_LOCAL,
+    IMAGES_FOLDER,
+    training_data_path,
+    set_thread_priority
+)
+import time,random
 import os
 import pandas as pd
-from defs import *
+from defs import (
+    empty_folder,
+    shuffle_DataFrame,
+    copy_to_training,
+    parse_name,
+    find_images,
+    copy_to_training_lines,
+    get_directories,
+    get_folders_by_level
+)
 from requests.exceptions import RequestException
 import threading
-from defs_img import *
+from defs_img import( 
+    download_image,
+    is_corrupt_image,
+    discard_bad_image,
+    crop_images,
+    convert_to_webp,
+    augment_image,
+    train_yolo_model
+)
+
+
 import ast
 from multiprocessing import Manager, Pool
 from ultralytics import YOLO
-from save_context import *
-from multiprocessing import Value
+from save_context import SaveContext,load_state,ContextTaxon,save_state
 
 def process_row(
         taxon_index, 
@@ -494,19 +545,19 @@ def copy_to_training_lines_process(folder, dest_path):
     copy_to_training_lines(dest_path, folder_name, images)
                 
 def train(
-        model_folder: str = os.path.join(PATH_MODELS_TRAINED, "model_g"),
-        path_model_to_train = MODEL_INIT,
-        column_filters: list = [],
-        filters: list = [],
-        taxon_index: int = 0,
-        temp_image_path = TEMP_IMAGE_PATH,
-        train_folder_path = TRAINING_DEST_PATH,
-        resume = False,
-        download_images_bool = True,
-        save_context = None,
-        delete_previus_model = False,
-        key = None
-    ):
+    model_folder: str = os.path.join(PATH_MODELS_TRAINED, "model_g"),
+    path_model_to_train = MODEL_INIT,
+    column_filters: list = [],
+    filters: list = [],
+    taxon_index: int = 0,
+    temp_image_path = TEMP_IMAGE_PATH,
+    train_folder_path = TRAINING_DEST_PATH,
+    resume = False,
+    download_images_bool = True,
+    save_context = None,
+    delete_previus_model = False,
+    key = None
+):
 
     start_time_func = time.time()
 
@@ -566,7 +617,11 @@ def train(
             if USE_PROCESS_TO_DOWNLOAD:
                 with Pool(processes=NUMBER_OF_PROCESS) as pool_download:
                     for chunks in filter_chunk_all(dfs, training, key, chunksize):
-                        args = (taxon_index, training, initial_counts, counts_with_crops, counts_with_transformations_and_crops, temp_image_path, model_to_discart, model_to_crop, key, semaphore_values)
+                        args = (
+                            taxon_index, training, initial_counts, counts_with_crops, 
+                            counts_with_transformations_and_crops, temp_image_path, 
+                            model_to_discart, model_to_crop, key, semaphore_values
+                        )
                         chunks_with_args = [(chunk, *args) for chunk in chunks]
                         pool_download.starmap(process_chunk, chunks_with_args)
                         del chunks_with_args, chunks
@@ -575,7 +630,11 @@ def train(
                             break
             else:
                 for chunk in filter_chunk(dfs, training, key, chunksize):
-                    process_chunk(chunk, taxon_index, training, initial_counts, counts_with_crops, counts_with_transformations_and_crops, temp_image_path, model_to_discart, model_to_crop, key)
+                    process_chunk(
+                        chunk, taxon_index, training, initial_counts, counts_with_crops, 
+                        counts_with_transformations_and_crops, temp_image_path, 
+                        model_to_discart, model_to_crop, key
+                    )
                     if counts_with_transformations_and_crops[key] >= total_image_per_cat(taxon_index):
                         break
 
@@ -626,7 +685,7 @@ def train(
                 for filter_item in filters:
                     for filter in filter_item:
                         file.write(filter + ",")
-                file.write('especies: ')
+                file.write('species: ')
                 for specie in counts_with_transformations_and_crops.keys():
                     file.write(specie)
 
