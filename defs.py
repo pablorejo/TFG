@@ -425,3 +425,5 @@ def shuffle_DataFrame(df_list: list,taxon_index: int, output_csv: str= None):
         except Exception as e:
             fail(f"Failed to shuffle and save DataFrame. Reason: {e}")
             return []
+    else:
+        return df_list

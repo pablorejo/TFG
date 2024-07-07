@@ -8,7 +8,8 @@ from conf import (
     MAX_NUM_OF_CROPS,
     DEVICE,
     BATCH,
-    NUM_WORKERS
+    NUM_WORKERS,
+    CHECK_IMAGES
 )
 import torch
 import cv2
@@ -149,44 +150,47 @@ def discard_bad_image(img_path, model_to_discard, ask=False, confidence=0.90):
     Returns:
     bool: True if the image is good, False if it is bad or not a file.
     """
-    try:
-        # Make a prediction on the image
-        results = model_to_discard.predict(img_path, verbose=VERBOSE, device='cpu')
-        
-        for result in results:
-            probs = result.probs  # Probs object for classification outputs
-            top1_class_index = probs.top1
-            top1_confidence = probs.top1conf
+    if CHECK_IMAGES:
+        try:
+            # Make a prediction on the image
+            results = model_to_discard.predict(img_path, verbose=VERBOSE, device='cpu')
+            
+            for result in results:
+                probs = result.probs  # Probs object for classification outputs
+                top1_class_index = probs.top1
+                top1_confidence = probs.top1conf
 
-            if result.names[top1_class_index] == types['bad']:
-                if os.path.isfile(img_path) or os.path.islink(img_path):
-                    if top1_confidence < confidence and ask:
-                        with Image.open(img_path) as image:
-                            image.show()
-                            print(f"Most probable class: {result.names[top1_class_index]} with confidence {top1_confidence}\n")
-                            response = input('Do you want to delete the image? (y/n)\n').lower()
-                            if response == 'y':
-                                os.remove(img_path)
-                                info("You indicated the image is bad")
-                                return False
-                            else: 
-                                info("You indicated the image is good")
-                                return True
-                    else: 
-                        os.remove(img_path)
-                        warning("The image is bad")
+                if result.names[top1_class_index] == types['bad']:
+                    if os.path.isfile(img_path) or os.path.islink(img_path):
+                        if top1_confidence < confidence and ask:
+                            with Image.open(img_path) as image:
+                                image.show()
+                                print(f"Most probable class: {result.names[top1_class_index]} with confidence {top1_confidence}\n")
+                                response = input('Do you want to delete the image? (y/n)\n').lower()
+                                if response == 'y':
+                                    os.remove(img_path)
+                                    info("You indicated the image is bad")
+                                    return False
+                                else: 
+                                    info("You indicated the image is good")
+                                    return True
+                        else: 
+                            os.remove(img_path)
+                            warning("The image is bad")
+                            return False
+                    else:
+                        fail("The image is not a file") 
                         return False
-                else:
-                    fail("The image is not a file") 
-                    return False
-            else: 
-                info("The image is good")
-                return True
-    except NameError as e:
-        warning(f"The discard model does not exist, so returning true: {e}")
-        return True
-    except Exception as e:
-        warning(f"Unexpected error: {e}")
+                else: 
+                    info("The image is good")
+                    return True
+        except NameError as e:
+            warning(f"The discard model does not exist, so returning true: {e}")
+            return True
+        except Exception as e:
+            warning(f"Unexpected error: {e}")
+            return True
+    else:
         return True
 
 def crop_images(src_img: str, model_to_crop: YOLO, model_to_discard: YOLO, delete_original: bool = True):

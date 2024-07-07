@@ -150,9 +150,8 @@ def process_image(
         return
     
     not_discard = True
-    if CHECK_IMAGES:
-        with semaphore_models:
-            not_discard = discard_bad_image(full_path, model_to_discard)
+    with semaphore_models:
+        not_discard = discard_bad_image(full_path, model_to_discard)
     
     if not_discard:
         number_of_transformations = TRANSFORMATIONS_PER_IMAGE
@@ -632,6 +631,8 @@ def train(
     # Check if model exits
     model_exists = os.path.exists(os.path.join(model_folder, model_name))
     continue_bool = not model_exists and not skip
+    if not continue_bool:
+        info(f'skiping model {model_name}')
     
 
     start_time_proces_chunk = time.time()
@@ -662,7 +663,7 @@ def train(
             # Download images.
             down_load_images(model_folder,total_counts,dfs,training,chunksize,taxon_index,initial_counts,counts_with_crops,
                         counts_with_transformations_and_crops,temp_image_path,semaphore_values)
-            del dfs
+            del dfs,training,semaphore_values,chunksize,temp_image_path
             
             # Increase images if it is need.
             increase_images(counts_with_transformations_and_crops, taxon_index)
@@ -692,9 +693,9 @@ def train(
     if training_yolo_bool:
         results = None
         # Train if it can.
+        execution_time_process_chunk = end_time_proces_chunk - start_time_proces_chunk
         if continue_bool:
             info("Training: " + model_name)
-            execution_time_process_chunk = end_time_proces_chunk - start_time_proces_chunk
             model = chek_model(path_model_to_train) or chek_model(MODEL_INIT)
             
             results, model_folder = train_model(
@@ -708,7 +709,10 @@ def train(
                 counts_with_transformations_and_crops,
                 filters
             )
+            # delete model variable to save memory.
             del model
+        # Delete variables to save memory.
+        del execution_time_process_chunk,end_time_proces_chunk,start_time_proces_chunk,start_time_func
 
         path_to_model = os.path.join(results.save_dir, 'weights', 'best.pt') if results else path_model_to_train
 
@@ -761,6 +765,7 @@ def train(
                 info(f"Finished {column_filters} of {filters}")
     else:
         text = f"No data exists for these filters\n {column_filters}\n{filters}"
+
         model_folder_real = os.path.join(model_folder,model_name)
         chek_folder(model_folder_real)
         with open(os.path.join(model_folder_real, 'info.txt'), 'w') as file:
