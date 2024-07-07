@@ -663,7 +663,7 @@ def train(
             # Download images.
             down_load_images(model_folder,total_counts,dfs,training,chunksize,taxon_index,initial_counts,counts_with_crops,
                         counts_with_transformations_and_crops,temp_image_path,semaphore_values)
-            del dfs,training,semaphore_values,chunksize,temp_image_path
+            del dfs,training,semaphore_values,chunksize
             
             # Increase images if it is need.
             increase_images(counts_with_transformations_and_crops, taxon_index)
