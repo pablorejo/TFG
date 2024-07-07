@@ -365,7 +365,6 @@ def increase_image_thread(image, total_images, valor, semaphore, key, taxon_inde
             warning(f"No images found for class: {key}")
         
 def increase_images(counts_with_transformations_and_crops, taxon_index):
-    
     def increase_image_normal(image, total_images, valor):
         while total_images < total_image_per_cat(taxon_index):
             total_images += 1
@@ -381,6 +380,7 @@ def increase_images(counts_with_transformations_and_crops, taxon_index):
         if return_images:
             yield return_images
                 
+    info('Checking data images and increasing')
     manager = Manager()
     
     for key, value in counts_with_transformations_and_crops.items():
@@ -480,7 +480,9 @@ def filter_chunk_all(dfs, key, value, chunksize, size_chunk_list=NUMBER_OF_PROCE
     if concatenated_chunks:
         yield concatenated_chunks
         
-def train_model(model, train_folder_path, model_name, start_time_func, execution_time_process_chunk, model_folder, taxon_index, counts_with_transformations_and_crops):
+def train_model(model, train_folder_path, model_name, start_time_func, execution_time_process_chunk, 
+                model_folder, taxon_index, counts_with_transformations_and_crops,
+                filters):
     start_time_train = time.time()
     train_bool = False
     min_value = 1
@@ -507,17 +509,24 @@ def train_model(model, train_folder_path, model_name, start_time_func, execution
         )
         model_folder = os.path.dirname(results.save_dir) 
     else:
-        # Ensure model folder exists
+        os.makedirs(model_folder, exist_ok=True)
+        model_folder = os.path.join(model_folder, model_name)
         os.makedirs(model_folder, exist_ok=True)
         
-        path = os.path.join(model_folder, model_name)
-        model_folder = path
-        os.makedirs(path, exist_ok=True)
-        
         # Write a file indicating only one category
-        with open(os.path.join(path, 'data_path.txt'), 'w') as file:
+        with open(os.path.join(model_folder, 'data_path.txt'), 'w') as file:
             file.write('only one category')
 
+    # Saving data in files.
+    if TAXONOMIC_RANKS[taxon_index] == TAXONOMIC_RANKS[-1]:
+        with open(os.path.join(model_folder, 'data.txt'), 'w') as file:
+            for filter_item in filters:
+                for filter in filter_item:
+                    file.write(filter + ",")
+            file.write('species: ')
+            for specie in counts_with_transformations_and_crops.keys():
+                file.write(specie)
+                    
     end_time_func = time.time()
     execution_time_func = end_time_func - start_time_func
     execution_time_train = end_time_func - start_time_train
@@ -543,7 +552,41 @@ def copy_to_training_lines_process(folder, dest_path):
     folder_name = os.path.split(folder)[1]
     images = find_images(folder, extensions=['.webp', '.jpg'])
     copy_to_training_lines(dest_path, folder_name, images)
-                
+
+def down_load_images(model_folder,total_counts,dfs,training,chunksize,taxon_index,initial_counts,counts_with_crops,
+                     counts_with_transformations_and_crops,temp_image_path,semaphore_values):
+    
+    # Initialacing methods.
+    model_to_discart = YOLO(DISCARD_MODEL_PATH)
+    model_to_crop = YOLO(DETECT_MODEL_PATH)
+
+    info(f'Start processing chunks for model: {os.path.split(model_folder)[-1]}')
+    # Tour de counts list. 
+    for key, _ in total_counts.items():
+        if USE_PROCESS_TO_DOWNLOAD:
+            with Pool(processes=NUMBER_OF_PROCESS) as pool_download:
+                for chunks in filter_chunk_all(dfs, training, key, chunksize):
+                    args = (
+                        taxon_index, training, initial_counts, counts_with_crops, 
+                        counts_with_transformations_and_crops, temp_image_path, 
+                        model_to_discart, model_to_crop, key, semaphore_values
+                    )
+                    chunks_with_args = [(chunk, *args) for chunk in chunks]
+                    pool_download.starmap(process_chunk, chunks_with_args)
+                    del chunks_with_args, chunks
+
+                    if counts_with_transformations_and_crops[key] >= total_image_per_cat(taxon_index):
+                        break
+        else:
+            for chunk in filter_chunk(dfs, training, key, chunksize):
+                process_chunk(
+                    chunk, taxon_index, training, initial_counts, counts_with_crops, 
+                    counts_with_transformations_and_crops, temp_image_path, 
+                    model_to_discart, model_to_crop, key
+                )
+                if counts_with_transformations_and_crops[key] >= total_image_per_cat(taxon_index):
+                    break
+             
 def train(
     model_folder: str = os.path.join(PATH_MODELS_TRAINED, "model_g"),
     path_model_to_train = MODEL_INIT,
@@ -556,7 +599,8 @@ def train(
     download_images_bool = True,
     save_context = None,
     delete_previus_model = False,
-    key = None
+    key = None,
+    skip = False
 ):
 
     start_time_func = time.time()
@@ -580,19 +624,26 @@ def train(
     if download_images_bool:
         empty_folder(temp_image_path)
 
+    model_name = os.path.split(model_folder)[-1]
     training = TAXONOMIC_RANKS[taxon_index]
     chunksize = 10**3
     df_occurrences = pd.read_csv(PROCESSED_DATA_CSV, chunksize=chunksize, delimiter=',', low_memory=False, on_bad_lines='skip')
 
+    # Check if model exits
+    model_exists = os.path.exists(os.path.join(model_folder, model_name))
+    continue_bool = not model_exists and not skip
+    
+
     start_time_proces_chunk = time.time()
-
     if download_images_bool:
+        # Initial procesing of dataframe
         initial_counts, total_counts, dfs = initial_df_processing(df_occurrences, training, column_filters, filters, taxon_index)
-
         total_counts_correct = {key: value for key, value in total_counts.items() if value > (total_image_per_cat(taxon_index) * MIN_SAMPLE_PER_CATEGORY)}
         initial_counts = {key: 0 for key in total_counts_correct.keys()}
         total_counts = total_counts_correct
 
+        # Configure to use process to download or no.
+        semaphore_values = None
         if USE_PROCESS_TO_DOWNLOAD:
             manager = Manager()
             counts_with_crops = manager.dict(initial_counts)
@@ -604,98 +655,69 @@ def train(
             counts_with_crops = initial_counts.copy()
             counts_with_transformations_and_crops = initial_counts.copy()
 
-        if SHUFFLE_DATAFRAME and taxon_index == 0:
-            info('Shuffling dataframe')
-            dfs = shuffle_DataFrame(dfs)
+        if continue_bool: 
+            # Shufle DataFrame if it is configure
+            dfs = shuffle_DataFrame(dfs,taxon_index=taxon_index)
 
-        info(f'Start processing chunks for model: {os.path.split(model_folder)[-1]}')
-
-        model_to_discart = YOLO(DISCARD_MODEL_PATH)
-        model_to_crop = YOLO(DETECT_MODEL_PATH)
-
-        for key, _ in total_counts.items():
+            # Download images.
+            down_load_images(model_folder,total_counts,dfs,training,chunksize,taxon_index,initial_counts,counts_with_crops,
+                        counts_with_transformations_and_crops,temp_image_path,semaphore_values)
+            del dfs
+            
+            # Increase images if it is need.
+            increase_images(counts_with_transformations_and_crops, taxon_index)
             if USE_PROCESS_TO_DOWNLOAD:
-                with Pool(processes=NUMBER_OF_PROCESS) as pool_download:
-                    for chunks in filter_chunk_all(dfs, training, key, chunksize):
-                        args = (
-                            taxon_index, training, initial_counts, counts_with_crops, 
-                            counts_with_transformations_and_crops, temp_image_path, 
-                            model_to_discart, model_to_crop, key, semaphore_values
-                        )
-                        chunks_with_args = [(chunk, *args) for chunk in chunks]
-                        pool_download.starmap(process_chunk, chunks_with_args)
-                        del chunks_with_args, chunks
-
-                        if counts_with_transformations_and_crops[key] >= total_image_per_cat(taxon_index):
-                            break
-            else:
-                for chunk in filter_chunk(dfs, training, key, chunksize):
-                    process_chunk(
-                        chunk, taxon_index, training, initial_counts, counts_with_crops, 
-                        counts_with_transformations_and_crops, temp_image_path, 
-                        model_to_discart, model_to_crop, key
-                    )
-                    if counts_with_transformations_and_crops[key] >= total_image_per_cat(taxon_index):
-                        break
-
-        del dfs
-        info('Checking data images and increasing')
-        increase_images(counts_with_transformations_and_crops, taxon_index)
-        if USE_PROCESS_TO_DOWNLOAD:
-            manager.shutdown()
+                manager.shutdown()
 
     end_time_proces_chunk = time.time()
-
-    model_name = os.path.split(model_folder)[-1]
+    
+    # Checking model folder.
     info(MODEL_INIT)
     chek_folder(model_folder)
-    if download_images_bool:
+    if download_images_bool and continue_bool:
         if delete_previus_model and os.path.exists(model_folder):
             empty_folder(model_folder)
             os.rmdir(model_folder)
-
         info(f"Using the following image counts\nDownloaded images: {initial_counts}\nCropped images: {counts_with_crops}\nTotal images: {counts_with_transformations_and_crops}")
-
-    if download_images_bool:
+        
+    # Copy images to train
+    if download_images_bool and continue_bool:
         copy_to_training(temp_image_path, train_folder_path)
         training_yolo_bool = os.listdir(train_folder_path)
     else:
         training_yolo_bool = True
-
+    
+    
+    
     if training_yolo_bool:
-        info("Training: " + model_name)
-        execution_time_process_chunk = end_time_proces_chunk - start_time_proces_chunk
-        model = chek_model(path_model_to_train) or chek_model(MODEL_INIT)
-        
-        results, model_folder = train_model(
-            model,
-            train_folder_path,
-            model_name,
-            start_time_func,
-            execution_time_process_chunk,
-            model_folder,
-            taxon_index,
-            counts_with_transformations_and_crops
-        )
-        del model
-
-        if TAXONOMIC_RANKS[taxon_index] == TAXONOMIC_RANKS[-1]:
-            path = results.save_dir if results else train_folder_path
-            with open(os.path.join(path, 'data.txt'), 'w') as file:
-                for filter_item in filters:
-                    for filter in filter_item:
-                        file.write(filter + ",")
-                file.write('species: ')
-                for specie in counts_with_transformations_and_crops.keys():
-                    file.write(specie)
+        results = None
+        # Train if it can.
+        if continue_bool:
+            info("Training: " + model_name)
+            execution_time_process_chunk = end_time_proces_chunk - start_time_proces_chunk
+            model = chek_model(path_model_to_train) or chek_model(MODEL_INIT)
+            
+            results, model_folder = train_model(
+                model,
+                train_folder_path,
+                model_name,
+                start_time_func,
+                execution_time_process_chunk,
+                model_folder,
+                taxon_index,
+                counts_with_transformations_and_crops,
+                filters
+            )
+            del model
 
         path_to_model = os.path.join(results.save_dir, 'weights', 'best.pt') if results else path_model_to_train
 
+
+        # Tour list of total counts to train recursive.
         for key, _ in total_counts.items():
             if taxon_index < len(TAXONOMIC_RANKS) - 1:
                 next_column_filters = column_filters.copy()
                 next_filters = filters.copy()
-
                 training_bool = True
                 if TAXONOMIC_RANKS[taxon_index] not in next_column_filters:
                     next_column_filters.append(TAXONOMIC_RANKS[taxon_index])
@@ -739,8 +761,9 @@ def train(
                 info(f"Finished {column_filters} of {filters}")
     else:
         text = f"No data exists for these filters\n {column_filters}\n{filters}"
-        chek_folder(model_folder)
-        with open(os.path.join(model_folder, 'info.txt'), 'w') as file:
+        model_folder_real = os.path.join(model_folder,model_name)
+        chek_folder(model_folder_real)
+        with open(os.path.join(model_folder_real, 'info.txt'), 'w') as file:
             file.write(text)
         info(text)
 
@@ -803,7 +826,8 @@ def main():
             taxon_index=taxon_index,
             train_folder_path=TRAINING_DEST_PATH,
             download_images_bool=True,
-            delete_previus_model=True,
+            delete_previus_model=False,
+            skip=True
         )
 
 if __name__ == "__main__":

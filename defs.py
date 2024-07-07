@@ -7,6 +7,7 @@ from conf import (
     TRAINING_DETECT_DEST_PATH,
     VALIDATION_PERCENTAGE,
     TESTING_PERCENTAGE,
+    SHUFFLE_DATAFRAME,
     training_detect_data_path,
     TRAINING_PERCENTAGE,
     USE_PROCESS_TO_COPI_IMG,
@@ -390,7 +391,7 @@ def copy_file(source_path, dest_path, txt_associated: bool = False):
     except Exception as e:
         fail(f"Failed to copy file: {source_path} to {dest_path}. Reason: {e}")
 
-def shuffle_DataFrame(df_list: list, output_csv: str):
+def shuffle_DataFrame(df_list: list,taxon_index: int, output_csv: str= None):
     """
     Shuffles a list of DataFrames to be random and saves it in a designated CSV.
 
@@ -401,24 +402,26 @@ def shuffle_DataFrame(df_list: list, output_csv: str):
     Returns:
         list: A new list of chunks with shuffled DataFrames.
     """
-    try:
-        # Initialize an empty list to store the shuffled chunks
-        chunks_list = []
-        
-        # Shuffle each chunk and add it to the list of chunks
-        for chunk in df_list:
-            shuffled_chunk = chunk.sample(frac=1).reset_index(drop=True)
-            chunks_list.append(shuffled_chunk)
-        
-        # Concatenate all shuffled chunks into a single DataFrame
-        shuffled_df = pd.concat(chunks_list, ignore_index=True)
-        
-        # Save the shuffled DataFrame in a new CSV file
-        shuffled_df.to_csv(output_csv, index=False)
-        
-        info(f"Shuffled file saved as: {output_csv}")
-        return chunks_list
+    info('Shuffling dataframe')
+    if SHUFFLE_DATAFRAME and taxon_index == 0:
+        try:
+            # Initialize an empty list to store the shuffled chunks
+            chunks_list = []
+            
+            # Shuffle each chunk and add it to the list of chunks
+            for chunk in df_list:
+                shuffled_chunk = chunk.sample(frac=1).reset_index(drop=True)
+                chunks_list.append(shuffled_chunk)
+            
+            # Concatenate all shuffled chunks into a single DataFrame
+            shuffled_df = pd.concat(chunks_list, ignore_index=True)
+            
+            if output_csv != None:
+                # Save the shuffled DataFrame in a new CSV file
+                shuffled_df.to_csv(output_csv, index=False)
+                info(f"Shuffled file saved as: {output_csv}")
+            return chunks_list
 
-    except Exception as e:
-        fail(f"Failed to shuffle and save DataFrame. Reason: {e}")
-        return []
+        except Exception as e:
+            fail(f"Failed to shuffle and save DataFrame. Reason: {e}")
+            return []
