@@ -395,7 +395,7 @@ def increase_images(counts_with_transformations_and_crops, taxon_index):
                 
                 with Pool(processes=NUMBER_OF_PROCESS) as pool_aument_images:
                     for images_chunk in return_n_images(images, NUMBER_OF_PROCESS * 2):
-                        args = (total_images, value, semaphore, key)
+                        args = (total_images, value, semaphore, key, taxon_index)
                         args_aument = [(image, *args) for image in images_chunk]
                         pool_aument_images.starmap(increase_image_thread, args_aument)
                         with semaphore:
@@ -488,13 +488,16 @@ def train_model(model, train_folder_path, model_name, start_time_func, execution
     min_cat = 2
     
     # Check if training should proceed
-    if len(counts_with_transformations_and_crops) > 1:
-        for value in counts_with_transformations_and_crops.values():
-            if value > min_value:
-                min_cat -= 1
-                if min_cat == 0:
-                    train_bool = True
-                    break
+    if counts_with_transformations_and_crops != None:
+        if len(counts_with_transformations_and_crops) > 1:
+            for value in counts_with_transformations_and_crops.values():
+                if value > min_value:
+                    min_cat -= 1
+                    if min_cat == 0:
+                        train_bool = True
+                        break
+    else:
+        train_bool = True
 
     results = None
     if train_bool:
@@ -522,9 +525,10 @@ def train_model(model, train_folder_path, model_name, start_time_func, execution
             for filter_item in filters:
                 for filter in filter_item:
                     file.write(filter + ",")
-            file.write('species: ')
-            for specie in counts_with_transformations_and_crops.keys():
-                file.write(specie)
+            if counts_with_transformations_and_crops != None:
+                file.write('species: ')
+                for specie in counts_with_transformations_and_crops.keys():
+                    file.write(specie)
                     
     end_time_func = time.time()
     execution_time_func = end_time_func - start_time_func
@@ -585,7 +589,6 @@ def down_load_images(model_folder,total_counts,dfs,training,chunksize,taxon_inde
                 )
                 if counts_with_transformations_and_crops[key] >= total_image_per_cat(taxon_index):
                     break
-             
 def train(
     model_folder: str = os.path.join(PATH_MODELS_TRAINED, "model_g"),
     path_model_to_train = MODEL_INIT,
@@ -601,7 +604,7 @@ def train(
     key = None,
     skip = False
 ):
-
+    counts_with_transformations_and_crops = None # it is used to fix some problems
     start_time_func = time.time()
 
     if resume:
@@ -630,7 +633,7 @@ def train(
 
     # Check if model exits
     model_exists = os.path.exists(os.path.join(model_folder, model_name))
-    continue_bool = not model_exists and not skip
+    continue_bool = not model_exists or not skip
     if not continue_bool:
         info(f'skiping model {model_name}')
     
@@ -663,7 +666,7 @@ def train(
             # Download images.
             down_load_images(model_folder,total_counts,dfs,training,chunksize,taxon_index,initial_counts,counts_with_crops,
                         counts_with_transformations_and_crops,temp_image_path,semaphore_values)
-            del dfs,training,semaphore_values,chunksize,temp_image_path
+            del dfs,training,semaphore_values,chunksize
             
             # Increase images if it is need.
             increase_images(counts_with_transformations_and_crops, taxon_index)
@@ -684,16 +687,17 @@ def train(
     # Copy images to train
     if download_images_bool and continue_bool:
         copy_to_training(temp_image_path, train_folder_path)
+        del temp_image_path
         training_yolo_bool = os.listdir(train_folder_path)
     else:
+        # copy_to_training(temp_image_path, train_folder_path)
         training_yolo_bool = True
-    
-    
     
     if training_yolo_bool:
         results = None
         # Train if it can.
         execution_time_process_chunk = end_time_proces_chunk - start_time_proces_chunk
+        print(continue_bool)
         if continue_bool:
             info("Training: " + model_name)
             model = chek_model(path_model_to_train) or chek_model(MODEL_INIT)
@@ -809,30 +813,39 @@ def main():
     else:
         filter_columns = [
             TAXONOMIC_RANKS[0],
-            # TAXONOMIC_RANKS[1],
-            # TAXONOMIC_RANKS[2],
-            # TAXONOMIC_RANKS[3],
-            # TAXONOMIC_RANKS[4]
+            TAXONOMIC_RANKS[1],
+            TAXONOMIC_RANKS[2],
+            TAXONOMIC_RANKS[3],
+            TAXONOMIC_RANKS[4]
         ]
 
         filters = [
             ['Gastropoda', 'Bivalvia', 'Cephalopoda', 'Polyplacophora'],
-            # ['Seguenziida', 'Ellobiida', 'Runcinida', ...],
-            # ['Helicarionidae', 'Euconulidae', 'Clausiliidae', ...],
-            # ['Vidovicia', 'Cattania', 'Palaeotachea', ...],
-            # ['Cornu Born, 1778', 'Cornu mazzullii (De Cristofori & Jan, 1832)', ...]
+
+            ['Cephalaspidea', 'Neomphalida', 'Siphonariida', 'Seguenziida', 'Trochida', 'Pleurotomariida', 'Ellobiida', 'Cyrtoneritida', 'Pteropoda', 'Runcinida', 'Cycloneritida', 'Pleurobranchida', 'Aplysiida', 'Nudibranchia', 'Umbraculida', 'Cocculinida', 'Systellommatophora', 'Neogastropoda', 'Architaenioglossa', 'Littorinimorpha', 'Lepetellida', 'Stylommatophora'],
+           
+            ['Zonitidae', 'Sphincterochilidae', 'Charopidae', 'Subulinidae', 'Streptaxidae', 'Zachrysiidae', 'Oleacinidae', 'Sagdidae', 'Limacidae', 'Succineidae', 'Archaeozonitidae', 'Palaeoxestinidae', 'Urocyclidae', 'Simpulopsidae', 'Athoracophoridae', 'Clavatoridae', 'Cerionidae', 'Pyramidulidae', 'Milacidae', 'Xanthonychidae', 'Scolodontidae', 'Ferussaciidae', 'Fauxulidae', 'Enidae', 'Diapheridae', 'Arionidae', 'Amastridae', 'Ariophantidae', 'Vertiginidae', 'Trochomorphidae', 'Epiphragmophoridae', 'Thysanophoridae', 'Vitrinidae', 'Pupillidae', 'Dorcasiidae', 'Pagodulinidae', 'Punctidae', 'Spelaeodiscidae', 'Amphibulimidae', 'Camaenidae', 'Endodontidae', 'Helicodontidae', 'Anadromidae', 'Oxychilidae', 'Solaropsidae', 'Odontostomidae', 'Helicodiscidae', 'Helicidae', 'Chondrinidae', 'Cepolidae', 'Acavidae', 'Oreohelicidae', 'Palaeostoidae', 'Agardhiellidae', 'Lauriidae', 'Cerastidae', 'Eucalodiidae', 'Gastrocoptidae', 'Trichodiscinidae', 'Truncatellinidae', 'Strobilopsidae', 'Geomitridae', 'Agriolimacidae', 'Binneyidae', 'Urocoptidae', 'Anadenidae', 'Hygromiidae', 'Elonidae', 'Bulimulidae', 'Boettgerillidae', 'Spelaeoconchidae', 'Megomphicidae', 'Grandipatulidae', 'Achatinellidae', 'Valloniidae', 'Draparnaudiidae', 'Pristilomatidae', 'Canariellidae', 'Discidae', 'Cystopeltidae', 'Partulidae', 'Philomycidae', 'Microcystidae', 'Macrocyclidae', 'Cylindrellinidae', 'Dyakiidae', 'Vidaliellidae', 'Azecidae', 'Euconulidae', 'Oopeltidae', 'Chronidae', 'Ariolimacidae', 'Achatinidae', 'Rhytididae', 'Argnidae', 'Bothriembryontidae', 'Parmacellidae', 'Filholiidae', 'Clausiliidae', 'Orculidae', 'Megaspiridae', 'Trissexodontidae', 'Cochlicopidae', 'Strophocheilidae', 'Orthalicidae', 'Pleurodontidae', 'Pleurodiscidae', 'Testacellidae', 'Plectopylidae', 'Polygyridae', 'Caryodidae', 'Spiraxidae', 'Labyrinthidae', 'Holospiridae', 'Helicarionidae', 'Epirobiidae', 'Haplotrematidae', 'Gastrodontidae', 'Odontocycladidae'],
+            
+            ['Pseudotachea', 'Loxana', 'Codringtonia', 'Lindholmia', 'Pseudotrizona', 'Gyrostomella', 'Drobacia', 'Campylaeopsis', 'Theba', 'Levantina', 'Neocrassa', 'Marmorana', 'Mesodontopsis', 'Faustina', 'Iberus', 'Helix', 'Cepaea', 'Tacheocampylaea', 'Vidovicia', 'Alabastrina', 'Campylaea', 'Arianta', 'Lampadia', 'Liburnica', 'Helicigona', 'Dinarica', 'Delphinatia', 'Cylindrus', 'Discula', 'Megalotachea', 'Tartessiberus', 'Isaurica', 'Cattania', 'Chilostoma', 'Eobania', 'Hemicycla', 'Cornu', 'Cantareus', 'Thiessea', 'Iberellus', 'Josephinella', 'Isognomostoma', 'Otala', 'Eremina', 'Parachloraea', 'Pseudoklikia', 'Tyrrheniberus', 'Palaeotachea', 'Macularia', 'Caucasotachea', 'Paradrobacia', 'Kosicia', 'Kollarix', 'Allognathus', 'Rossmaessleria', 'Massylaea', 'Causa', 'Corneola', 'Amanica'],
+           
+            ['Cornu insolida (Monterosato, 1892)', 'Cornu aspersum (O.F.Müller, 1774)', 'Cornu mazzullii (De Cristofori & Jan, 1832)', 'Cornu cephalaeditana (Giannuzzi-Savelli, Sparacio & Oliva, 1986)', 'Cornu Born, 1778'],
+            
         ]
 
-        taxon_index = 0
-
+        taxon_index = 2
+        # calculate_data_of_df(data_path= PROCESSED_DATA_CSV, filter_colums=filter_columns, filters=filters, print_bool=True)
+        model_folder = os.path.join(PATH_MODELS_TRAINED, "model_g","model_order")
+        chek_folder(model_folder)
+        
         train(
             column_filters=filter_columns,
             filters=filters,
             taxon_index=taxon_index,
             train_folder_path=TRAINING_DEST_PATH,
-            download_images_bool=True,
+            download_images_bool=False,
             delete_previus_model=False,
-            skip=True
+            skip=False,
+            model_folder=model_folder
         )
 
 if __name__ == "__main__":
