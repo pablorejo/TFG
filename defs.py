@@ -94,7 +94,7 @@ def copy_to_training_file(data_type, file_path):
     file_path (str): The file containing the paths of the files to be copied, separated by \\n.
     """
     try:
-        with open(file_path) as file:
+        with open(file_path, encoding='utf-8') as file:
             lines = file.read().splitlines()
             random.shuffle(lines)  # This shuffles the list in-place
             copy_to_training_lines(dest_path=TRAINING_DEST_PATH, data_type=data_type, lines=lines)

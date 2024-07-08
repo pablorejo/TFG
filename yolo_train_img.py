@@ -516,20 +516,23 @@ def train_model(model, train_folder_path, model_name, start_time_func, execution
         os.makedirs(model_folder, exist_ok=True)
         
         # Write a file indicating only one category
-        with open(os.path.join(model_folder, 'data_path.txt'), 'w') as file:
+        with open(os.path.join(model_folder, 'data_path.txt'), 'w', encoding='utf-8') as file:
             file.write('only one category')
 
     # Saving data in files.
     if TAXONOMIC_RANKS[taxon_index] == TAXONOMIC_RANKS[-1]:
-        with open(os.path.join(model_folder, 'data.txt'), 'w') as file:
+        with open(os.path.join(model_folder, 'data.txt'), 'w', encoding='utf-8') as file:
             for filter_item in filters:
                 for filter in filter_item:
                     file.write(filter + ",")
             if counts_with_transformations_and_crops != None:
                 file.write('species: ')
-                for specie in counts_with_transformations_and_crops.keys():
-                    file.write(specie)
-                    
+                try:
+                    for specie in counts_with_transformations_and_crops.keys():
+                        file.write(specie)
+                except Exception as e:
+                    warning(f"Error in train model {e}")
+                
     end_time_func = time.time()
     execution_time_func = end_time_func - start_time_func
     execution_time_train = end_time_func - start_time_train
@@ -546,7 +549,7 @@ def save_information(model_folder, execution_time_func, execution_time_train, ex
     info(f"The process of chunks took {execution_time_process_chunk} seconds to execute.")
     
     information_path = os.path.join(model_folder, 'information.txt')
-    with open(information_path, 'w') as file:
+    with open(information_path, 'w', encoding='utf-8') as file:
         file.write(f"The function took {execution_time_func} seconds to execute.\n")
         file.write(f"The training took {execution_time_train} seconds to execute.\n")
         file.write(f"The process of chunks took {execution_time_process_chunk} seconds to execute.\n")
@@ -772,7 +775,7 @@ def train(
 
         model_folder_real = os.path.join(model_folder,model_name)
         chek_folder(model_folder_real)
-        with open(os.path.join(model_folder_real, 'info.txt'), 'w') as file:
+        with open(os.path.join(model_folder_real, 'info.txt'), 'w', encoding='utf-8') as file:
             file.write(text)
         info(text)
 

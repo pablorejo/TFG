@@ -74,7 +74,7 @@ def main():
                             os.remove(full_path)
                             response = requests.get(row['identifier'], timeout=5)
                             if response.status_code == 200:
-                                with open(full_path, 'wb') as file:
+                                with open(full_path, 'wb', encoding='utf-8') as file:
                                     file.write(response.content)
                                     convert_to_webp(full_path)
                                     file.close()

@@ -267,7 +267,7 @@ def download_image(url, full_path, max_retries=3, timeout=5):
         try:
             response = requests.get(url, timeout=timeout)
             if response.status_code == 200:
-                with open(full_path, 'wb') as file:
+                with open(full_path, 'wb', encoding='utf-8') as file:
                     file.write(response.content)
                 with Image.open(full_path) as img:
                     img.verify()

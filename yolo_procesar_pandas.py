@@ -128,7 +128,7 @@ def process_pandas():
     time_to_process = time_end_process - time_init_process
     text_info = f'Yolo process pandas took {time_to_process}'
     info(text_info)
-    with open(os.path.join(PANDAS_CSV_PATH,'info_yolo_process_pandas.txt'),'w') as file:
+    with open(os.path.join(PANDAS_CSV_PATH,'info_yolo_process_pandas.txt'),'w', encoding='utf-8') as file:
         file.write(text_info)
     
     df_valid_rows.to_csv(PROCESSED_DATA_CSV, index=False)

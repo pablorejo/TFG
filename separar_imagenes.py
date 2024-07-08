@@ -65,19 +65,19 @@ class ImageOrganizerApp:
         btn_right.pack(side='right', padx=20)
 
     def left_button_action(self, event=None):
-        with open(BAD_IMAGE_FILE, 'a') as file:
+        with open(BAD_IMAGE_FILE, 'a', encoding='utf-8') as file:
             file.write(self.url + "\n")
         self.next_image()
 
     def right_button_action(self, event=None):
-        with open(GOOD_IMAGE_FILE, 'a') as file:
+        with open(GOOD_IMAGE_FILE, 'a', encoding='utf-8') as file:
             file.write(self.url + "\n")
         self.next_image()
     
     def clear_files(self):
-        with open(BAD_IMAGE_FILE, 'w') as file:
+        with open(BAD_IMAGE_FILE, 'w', encoding='utf-8') as file:
             file.close()
-        with open(GOOD_IMAGE_FILE, 'w') as file:
+        with open(GOOD_IMAGE_FILE, 'w', encoding='utf-8') as file:
             file.close()
 
 if __name__ == "__main__":
