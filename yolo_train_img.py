@@ -636,7 +636,14 @@ def train(
 
     # Check if model exits
     model_exists = os.path.exists(os.path.join(model_folder, model_name))
-    continue_bool = not model_exists or not skip
+    if skip:
+        if not model_exists:
+            continue_bool = True
+        else:
+            continue_bool = False
+    else:
+        continue_bool = True
+        
     if not continue_bool:
         info(f'skiping model {model_name}')
     
@@ -766,7 +773,8 @@ def train(
                         taxon_index=taxon_index + 1,
                         path_model_to_train=path_to_model,
                         resume=resume,
-                        delete_previus_model=delete_previus_model
+                        delete_previus_model=delete_previus_model,
+                        skip=skip
                     )
             else:
                 info(f"Finished {column_filters} of {filters}")
@@ -816,26 +824,26 @@ def main():
     else:
         filter_columns = [
             TAXONOMIC_RANKS[0],
-            TAXONOMIC_RANKS[1],
-            TAXONOMIC_RANKS[2],
-            TAXONOMIC_RANKS[3],
-            TAXONOMIC_RANKS[4]
+            # TAXONOMIC_RANKS[1],
+            # TAXONOMIC_RANKS[2],
+            # TAXONOMIC_RANKS[3],
+            # TAXONOMIC_RANKS[4]
         ]
 
         filters = [
             ['Gastropoda', 'Bivalvia', 'Cephalopoda', 'Polyplacophora'],
 
-            ['Cephalaspidea', 'Neomphalida', 'Siphonariida', 'Seguenziida', 'Trochida', 'Pleurotomariida', 'Ellobiida', 'Cyrtoneritida', 'Pteropoda', 'Runcinida', 'Cycloneritida', 'Pleurobranchida', 'Aplysiida', 'Nudibranchia', 'Umbraculida', 'Cocculinida', 'Systellommatophora', 'Neogastropoda', 'Architaenioglossa', 'Littorinimorpha', 'Lepetellida', 'Stylommatophora'],
+            # ['Cephalaspidea', 'Neomphalida', 'Siphonariida', 'Seguenziida', 'Trochida', 'Pleurotomariida', 'Ellobiida', 'Cyrtoneritida', 'Pteropoda', 'Runcinida', 'Cycloneritida', 'Pleurobranchida', 'Aplysiida', 'Nudibranchia', 'Umbraculida', 'Cocculinida', 'Systellommatophora', 'Neogastropoda', 'Architaenioglossa', 'Littorinimorpha', 'Lepetellida', 'Stylommatophora'],
            
-            ['Zonitidae', 'Sphincterochilidae', 'Charopidae', 'Subulinidae', 'Streptaxidae', 'Zachrysiidae', 'Oleacinidae', 'Sagdidae', 'Limacidae', 'Succineidae', 'Archaeozonitidae', 'Palaeoxestinidae', 'Urocyclidae', 'Simpulopsidae', 'Athoracophoridae', 'Clavatoridae', 'Cerionidae', 'Pyramidulidae', 'Milacidae', 'Xanthonychidae', 'Scolodontidae', 'Ferussaciidae', 'Fauxulidae', 'Enidae', 'Diapheridae', 'Arionidae', 'Amastridae', 'Ariophantidae', 'Vertiginidae', 'Trochomorphidae', 'Epiphragmophoridae', 'Thysanophoridae', 'Vitrinidae', 'Pupillidae', 'Dorcasiidae', 'Pagodulinidae', 'Punctidae', 'Spelaeodiscidae', 'Amphibulimidae', 'Camaenidae', 'Endodontidae', 'Helicodontidae', 'Anadromidae', 'Oxychilidae', 'Solaropsidae', 'Odontostomidae', 'Helicodiscidae', 'Helicidae', 'Chondrinidae', 'Cepolidae', 'Acavidae', 'Oreohelicidae', 'Palaeostoidae', 'Agardhiellidae', 'Lauriidae', 'Cerastidae', 'Eucalodiidae', 'Gastrocoptidae', 'Trichodiscinidae', 'Truncatellinidae', 'Strobilopsidae', 'Geomitridae', 'Agriolimacidae', 'Binneyidae', 'Urocoptidae', 'Anadenidae', 'Hygromiidae', 'Elonidae', 'Bulimulidae', 'Boettgerillidae', 'Spelaeoconchidae', 'Megomphicidae', 'Grandipatulidae', 'Achatinellidae', 'Valloniidae', 'Draparnaudiidae', 'Pristilomatidae', 'Canariellidae', 'Discidae', 'Cystopeltidae', 'Partulidae', 'Philomycidae', 'Microcystidae', 'Macrocyclidae', 'Cylindrellinidae', 'Dyakiidae', 'Vidaliellidae', 'Azecidae', 'Euconulidae', 'Oopeltidae', 'Chronidae', 'Ariolimacidae', 'Achatinidae', 'Rhytididae', 'Argnidae', 'Bothriembryontidae', 'Parmacellidae', 'Filholiidae', 'Clausiliidae', 'Orculidae', 'Megaspiridae', 'Trissexodontidae', 'Cochlicopidae', 'Strophocheilidae', 'Orthalicidae', 'Pleurodontidae', 'Pleurodiscidae', 'Testacellidae', 'Plectopylidae', 'Polygyridae', 'Caryodidae', 'Spiraxidae', 'Labyrinthidae', 'Holospiridae', 'Helicarionidae', 'Epirobiidae', 'Haplotrematidae', 'Gastrodontidae', 'Odontocycladidae'],
+            # ['Zonitidae', 'Sphincterochilidae', 'Charopidae', 'Subulinidae', 'Streptaxidae', 'Zachrysiidae', 'Oleacinidae', 'Sagdidae', 'Limacidae', 'Succineidae', 'Archaeozonitidae', 'Palaeoxestinidae', 'Urocyclidae', 'Simpulopsidae', 'Athoracophoridae', 'Clavatoridae', 'Cerionidae', 'Pyramidulidae', 'Milacidae', 'Xanthonychidae', 'Scolodontidae', 'Ferussaciidae', 'Fauxulidae', 'Enidae', 'Diapheridae', 'Arionidae', 'Amastridae', 'Ariophantidae', 'Vertiginidae', 'Trochomorphidae', 'Epiphragmophoridae', 'Thysanophoridae', 'Vitrinidae', 'Pupillidae', 'Dorcasiidae', 'Pagodulinidae', 'Punctidae', 'Spelaeodiscidae', 'Amphibulimidae', 'Camaenidae', 'Endodontidae', 'Helicodontidae', 'Anadromidae', 'Oxychilidae', 'Solaropsidae', 'Odontostomidae', 'Helicodiscidae', 'Helicidae', 'Chondrinidae', 'Cepolidae', 'Acavidae', 'Oreohelicidae', 'Palaeostoidae', 'Agardhiellidae', 'Lauriidae', 'Cerastidae', 'Eucalodiidae', 'Gastrocoptidae', 'Trichodiscinidae', 'Truncatellinidae', 'Strobilopsidae', 'Geomitridae', 'Agriolimacidae', 'Binneyidae', 'Urocoptidae', 'Anadenidae', 'Hygromiidae', 'Elonidae', 'Bulimulidae', 'Boettgerillidae', 'Spelaeoconchidae', 'Megomphicidae', 'Grandipatulidae', 'Achatinellidae', 'Valloniidae', 'Draparnaudiidae', 'Pristilomatidae', 'Canariellidae', 'Discidae', 'Cystopeltidae', 'Partulidae', 'Philomycidae', 'Microcystidae', 'Macrocyclidae', 'Cylindrellinidae', 'Dyakiidae', 'Vidaliellidae', 'Azecidae', 'Euconulidae', 'Oopeltidae', 'Chronidae', 'Ariolimacidae', 'Achatinidae', 'Rhytididae', 'Argnidae', 'Bothriembryontidae', 'Parmacellidae', 'Filholiidae', 'Clausiliidae', 'Orculidae', 'Megaspiridae', 'Trissexodontidae', 'Cochlicopidae', 'Strophocheilidae', 'Orthalicidae', 'Pleurodontidae', 'Pleurodiscidae', 'Testacellidae', 'Plectopylidae', 'Polygyridae', 'Caryodidae', 'Spiraxidae', 'Labyrinthidae', 'Holospiridae', 'Helicarionidae', 'Epirobiidae', 'Haplotrematidae', 'Gastrodontidae', 'Odontocycladidae'],
             
-            ['Pseudotachea', 'Loxana', 'Codringtonia', 'Lindholmia', 'Pseudotrizona', 'Gyrostomella', 'Drobacia', 'Campylaeopsis', 'Theba', 'Levantina', 'Neocrassa', 'Marmorana', 'Mesodontopsis', 'Faustina', 'Iberus', 'Helix', 'Cepaea', 'Tacheocampylaea', 'Vidovicia', 'Alabastrina', 'Campylaea', 'Arianta', 'Lampadia', 'Liburnica', 'Helicigona', 'Dinarica', 'Delphinatia', 'Cylindrus', 'Discula', 'Megalotachea', 'Tartessiberus', 'Isaurica', 'Cattania', 'Chilostoma', 'Eobania', 'Hemicycla', 'Cornu', 'Cantareus', 'Thiessea', 'Iberellus', 'Josephinella', 'Isognomostoma', 'Otala', 'Eremina', 'Parachloraea', 'Pseudoklikia', 'Tyrrheniberus', 'Palaeotachea', 'Macularia', 'Caucasotachea', 'Paradrobacia', 'Kosicia', 'Kollarix', 'Allognathus', 'Rossmaessleria', 'Massylaea', 'Causa', 'Corneola', 'Amanica'],
+            # ['Pseudotachea', 'Loxana', 'Codringtonia', 'Lindholmia', 'Pseudotrizona', 'Gyrostomella', 'Drobacia', 'Campylaeopsis', 'Theba', 'Levantina', 'Neocrassa', 'Marmorana', 'Mesodontopsis', 'Faustina', 'Iberus', 'Helix', 'Cepaea', 'Tacheocampylaea', 'Vidovicia', 'Alabastrina', 'Campylaea', 'Arianta', 'Lampadia', 'Liburnica', 'Helicigona', 'Dinarica', 'Delphinatia', 'Cylindrus', 'Discula', 'Megalotachea', 'Tartessiberus', 'Isaurica', 'Cattania', 'Chilostoma', 'Eobania', 'Hemicycla', 'Cornu', 'Cantareus', 'Thiessea', 'Iberellus', 'Josephinella', 'Isognomostoma', 'Otala', 'Eremina', 'Parachloraea', 'Pseudoklikia', 'Tyrrheniberus', 'Palaeotachea', 'Macularia', 'Caucasotachea', 'Paradrobacia', 'Kosicia', 'Kollarix', 'Allognathus', 'Rossmaessleria', 'Massylaea', 'Causa', 'Corneola', 'Amanica'],
            
-            ['Cornu insolida (Monterosato, 1892)', 'Cornu aspersum (O.F.Müller, 1774)', 'Cornu mazzullii (De Cristofori & Jan, 1832)', 'Cornu cephalaeditana (Giannuzzi-Savelli, Sparacio & Oliva, 1986)', 'Cornu Born, 1778'],
+            # ['Cornu insolida (Monterosato, 1892)', 'Cornu aspersum (O.F.Müller, 1774)', 'Cornu mazzullii (De Cristofori & Jan, 1832)', 'Cornu cephalaeditana (Giannuzzi-Savelli, Sparacio & Oliva, 1986)', 'Cornu Born, 1778'],
             
         ]
 
-        taxon_index = 2
+        taxon_index = 0
         # calculate_data_of_df(data_path= PROCESSED_DATA_CSV, filter_colums=filter_columns, filters=filters, print_bool=True)
         model_folder = os.path.join(PATH_MODELS_TRAINED, "model_g","model_order")
         chek_folder(model_folder)
@@ -845,10 +853,10 @@ def main():
             filters=filters,
             taxon_index=taxon_index,
             train_folder_path=TRAINING_DEST_PATH,
-            download_images_bool=False,
+            download_images_bool=True,
             delete_previus_model=False,
-            skip=False,
-            model_folder=model_folder
+            skip=True,
+            # model_folder=model_folder
         )
 
 if __name__ == "__main__":
